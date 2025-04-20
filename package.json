@@ -1,0 +1,27 @@
+{
+  "name": "vertex-ai-mcp-server",
+  "version": "0.1.0",
+  "description": "A Model Context Protocol server",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "vertex-ai-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "bun run tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "bun run build",
+    "watch": "bun run tsc --watch",
+    "inspector": "bunx @modelcontextprotocol/inspector build/index.js"
+  },
+  "dependencies": {
+    "@google-cloud/vertexai": "^1.9.3",
+    "@modelcontextprotocol/sdk": "0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+build/
+*.log
+.env*
+!.env.example
+*.zip
+*.md
+!README.md
