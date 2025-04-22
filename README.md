@@ -13,12 +13,33 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 
 ## Tools Provided
 
-### Query & Answer
-*   `answer_query_websearch`: Answers query using the configured Vertex AI model + Google Search grounding.
-*   `answer_query_direct`: Answers query using the configured Vertex AI model's internal knowledge.
-*   `answer_doc_query`: Finds official documentation for a topic and answers a query based primarily on that documentation, supplemented by web search for coding issues, using the configured Vertex AI model.
+### Query & Generation (AI Focused)
+*   `answer_query_websearch`: Answers a natural language query using the configured Vertex AI model enhanced with Google Search results.
+*   `answer_query_direct`: Answers a natural language query using only the internal knowledge of the configured Vertex AI model.
+*   `explain_topic_with_docs`: Provides a detailed explanation for a query about a specific software topic by synthesizing information primarily from official documentation found via web search.
+*   `get_doc_snippets`: Provides precise, authoritative code snippets or concise answers for technical queries by searching official documentation.
+*   `generate_project_guidelines`: Generates a structured project guidelines document (Markdown) based on a specified list of technologies (optionally with versions), using web search for best practices.
 
-*(Note: Input/output details for each tool can be inferred from the `ListToolsRequestSchema` handler in `src/index.ts` or dynamically via MCP introspection if supported by the client.)*
+### Filesystem Operations
+*   `read_file_content`: Reads the complete contents of a single file.
+*   `read_multiple_files_content`: Reads the contents of multiple files simultaneously.
+*   `write_file_content`: Creates a new file or completely overwrites an existing file with new content.
+*   `edit_file_content`: Makes line-based edits to a text file, returning a diff preview or applying changes.
+*   `create_directory`: Creates a new directory (including nested directories).
+*   `list_directory_contents`: Lists files and directories directly within a specified path (non-recursive).
+*   `get_directory_tree`: Gets a recursive tree view of files and directories as JSON.
+*   `move_file_or_directory`: Moves or renames files and directories.
+*   `search_filesystem`: Recursively searches for files/directories matching a name pattern, with optional exclusions.
+*   `get_filesystem_info`: Retrieves detailed metadata (size, dates, type, permissions) about a file or directory.
+
+### Combined AI + Filesystem Operations
+*   `save_generate_project_guidelines`: Generates project guidelines based on a tech stack and saves the result to a specified file path.
+*   `save_doc_snippet`: Finds code snippets from documentation and saves the result to a specified file path.
+*   `save_topic_explanation`: Generates a detailed explanation of a topic based on documentation and saves the result to a specified file path.
+*   `save_answer_query_direct`: Answers a query using only internal knowledge and saves the answer to a specified file path.
+*   `save_answer_query_websearch`: Answers a query using web search results and saves the answer to a specified file path.
+
+*(Note: Input/output schemas for each tool are defined in their respective files within `src/tools/` and exposed via the MCP server.)*
 
 ## Prerequisites
 

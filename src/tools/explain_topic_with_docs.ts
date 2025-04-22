@@ -1,12 +1,12 @@
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { ToolDefinition, modelIdPlaceholder } from "./tool_definition.js";
 
-export const answerDocQueryTool: ToolDefinition = {
-    name: "answer_doc_query",
-    description: `Answers a query about a specific software topic by first identifying its official documentation via web search, then answering based primarily on that documentation. Supplements with web search for specific coding issues if docs are insufficient. Uses the configured Vertex AI model (${modelIdPlaceholder}) with Google Search. Requires 'topic' and 'query'.`,
-    inputSchema: { 
-        type: "object", 
-        properties: { 
+export const explainTopicWithDocsTool: ToolDefinition = {
+    name: "explain_topic_with_docs",
+    description: `Provides a detailed explanation for a query about a specific software topic by synthesizing information primarily from official documentation found via web search. Focuses on comprehensive answers, context, and adherence to documented details. Uses the configured Vertex AI model (${modelIdPlaceholder}) with Google Search. Requires 'topic' and 'query'.`,
+    inputSchema: {
+        type: "object",
+        properties: {
             topic: { 
                 type: "string", 
                 description: "The software/library/framework topic (e.g., 'React Router', 'Python requests')." 
