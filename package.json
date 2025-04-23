@@ -2,10 +2,18 @@
   "name": "vertex-ai-mcp-server",
   "version": "0.1.0",
   "description": "A Model Context Protocol server",
-  "private": true,
+  "license": "MIT",
   "type": "module",
   "bin": {
-    "vertex-ai-mcp-server": "./build/index.js"
+    "vertex-ai-mcp-server": "build/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shariqriazz/vertex-ai-mcp-server.git"
+  },
+  "homepage": "https://github.com/shariqriazz/vertex-ai-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/shariqriazz/vertex-ai-mcp-server/issues"
   },
   "files": [
     "build"

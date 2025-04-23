@@ -69,9 +69,32 @@ This project implements a Model Context Protocol (MCP) server that provides a co
     ```
     This compiles the TypeScript code to `build/index.js`.
 
+## Usage (Standalone / NPX)
+
+Once published to npm, you can run this server directly using `npx`:
+
+```bash
+# Ensure required environment variables are set (e.g., GOOGLE_CLOUD_PROJECT)
+npx vertex-ai-mcp-server
+```
+
+Alternatively, install it globally:
+
+```bash
+npm install -g vertex-ai-mcp-server
+# Then run:
+vertex-ai-mcp-server
+```
+
+**Note:** Running standalone requires setting necessary environment variables (like `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, authentication credentials if not using ADC) in your shell environment before executing the command.
+
 ## Running with Cline
 
-1.  **Configure MCP Settings:** Add/update the configuration in your Cline MCP settings file (e.g., `.roo/mcp.json`).
+1.  **Configure MCP Settings:** Add/update the configuration in your Cline MCP settings file (e.g., `.roo/mcp.json`). You have two primary ways to configure the command:
+
+    **Option A: Using Node (Direct Path - Recommended for Development)**
+
+    This method uses `node` to run the compiled script directly. It's useful during development when you have the code cloned locally.
 
     ```json
     {
@@ -107,6 +130,45 @@ This project implements a Model Context Protocol (MCP) server that provides a co
     }
     ```
     *   **Important:** Ensure the `args` path points correctly to the `build/index.js` file. Using an absolute path might be more reliable.
+
+    **Option B: Using NPX (Requires Package Published to npm)**
+
+    This method uses `npx` to automatically download and run the server package from the npm registry. This is convenient if you don't want to clone the repository.
+
+    ```json
+    {
+      "mcpServers": {
+        "vertex-ai-mcp-server": {
+          "command": "npx", // Use npx
+          "args": [
+            "-y", // Auto-confirm installation
+            "vertex-ai-mcp-server" // The npm package name
+          ],
+          "env": {
+            // Required: Ensure these match your .env or are set here
+            "GOOGLE_CLOUD_PROJECT": "YOUR_GCP_PROJECT_ID",
+            "GOOGLE_CLOUD_LOCATION": "us-central1",
+            // Required if not using ADC:
+            // "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/service-account-key.json",
+            // Optional overrides:
+            "VERTEX_AI_MODEL_ID": "gemini-2.5-pro-exp-03-25",
+            "VERTEX_AI_TEMPERATURE": "0.0",
+            "VERTEX_AI_USE_STREAMING": "true",
+            "VERTEX_AI_MAX_OUTPUT_TOKENS": "65535",
+            "VERTEX_AI_MAX_RETRIES": "3",
+            "VERTEX_AI_RETRY_DELAY_MS": "1000"
+          },
+          "disabled": false,
+          "alwaysAllow": [
+             // Add tool names here if you don't want confirmation prompts
+             // e.g., "answer_query_websearch"
+          ],
+          "timeout": 3600 // Optional: Timeout in seconds
+        }
+        // Add other servers here...
+      }
+    }
+    ```
     *   Ensure the environment variables in the `env` block are correctly set, either matching `.env` or explicitly defined here. Remove comments from the actual JSON file.
 
 2.  **Restart/Reload Cline:** Cline should detect the configuration change and start the server.
@@ -118,3 +180,6 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 *   **Watch Mode:** `bun run watch`
 *   **Linting:** `bun run lint`
 *   **Formatting:** `bun run format`
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
