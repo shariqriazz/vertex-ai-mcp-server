@@ -2,6 +2,10 @@
 
 This project implements a Model Context Protocol (MCP) server that provides a comprehensive suite of tools for interacting with Google Cloud's Vertex AI Gemini models, focusing on coding assistance and general query answering.
 
+<a href="https://glama.ai/mcp/servers/@shariqriazz/vertex-ai-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@shariqriazz/vertex-ai-mcp-server/badge" alt="Vertex AI Server MCP server" />
+</a>
+
 ## Features
 
 *   Provides access to Vertex AI Gemini models via numerous MCP tools.
