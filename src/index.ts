@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load .env file from the current working directory (where npx/node is run)
+// This ensures it works correctly when run via npx outside the project dir
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -10,7 +17,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Content } from "@google-cloud/vertexai";
 import fs from "fs/promises";
-import path from "path";
 import { z } from "zod"; // Needed for schema parsing within handler
 import { diffLines, createTwoFilesPatch } from 'diff';
 import { minimatch } from 'minimatch';
