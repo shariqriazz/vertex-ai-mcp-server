@@ -15,14 +15,15 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Content } from "@google-cloud/vertexai";
+// Removed vertexai Content import as CombinedContent covers it
 import fs from "fs/promises";
 import { z } from "zod"; // Needed for schema parsing within handler
 import { diffLines, createTwoFilesPatch } from 'diff';
 import { minimatch } from 'minimatch';
 
-import { getVertexAIConfig } from './config.js';
-import { callVertexAIWithOptionalFunctionCalling } from './vertex_ai_client.js';
+import { getAIConfig } from './config.js';
+// Import CombinedContent along with callGenerativeAI
+import { callGenerativeAI, CombinedContent } from './vertex_ai_client.js';
 import { allTools, toolMap } from './tools/index.js';
 import { buildInitialContent, getToolsForApi } from './tools/tool_definition.js';
 
@@ -41,7 +42,6 @@ import { GetFileInfoArgsSchema } from './tools/get_file_info.js';
 import { SaveGenerateProjectGuidelinesArgsSchema } from './tools/save_generate_project_guidelines.js';
 import { SaveDocSnippetArgsSchema } from './tools/save_doc_snippet.js';
 import { SaveTopicExplanationArgsSchema } from './tools/save_topic_explanation.js';
-// Removed old schema, added new specific ones
 import { SaveAnswerQueryDirectArgsSchema } from './tools/save_answer_query_direct.js';
 import { SaveAnswerQueryWebsearchArgsSchema } from './tools/save_answer_query_websearch.js';
 
@@ -49,14 +49,11 @@ import { SaveAnswerQueryWebsearchArgsSchema } from './tools/save_answer_query_we
 // --- Filesystem Helper Functions (Adapted from example.ts) ---
 
 // Basic security check - ensure path stays within workspace
-// IMPORTANT: Relies on the execution environment (e.g., Docker, VM) for robust sandboxing.
 function validateWorkspacePath(requestedPath: string): string {
     const absolutePath = path.resolve(process.cwd(), requestedPath);
     if (!absolutePath.startsWith(process.cwd())) {
         throw new Error(`Path traversal attempt detected: ${requestedPath}`);
     }
-    // In a real scenario, you might add more checks (symlinks, allowed patterns, etc.)
-    // but for this integration, we rely on the workspace boundary.
     return absolutePath;
 }
 
@@ -84,8 +81,8 @@ async function getFileStats(filePath: string): Promise<FileInfo> {
 }
 
 async function searchFilesRecursive(
-  rootPath: string, // Assumed to be validated absolute path
-  currentPath: string, // Current absolute path being searched
+  rootPath: string,
+  currentPath: string,
   pattern: string,
   excludePatterns: string[],
   results: string[]
@@ -94,36 +91,30 @@ async function searchFilesRecursive(
 
   for (const entry of entries) {
     const fullPath = path.join(currentPath, entry.name);
-    const relativePath = path.relative(rootPath, fullPath); // Relative to initial search root
+    const relativePath = path.relative(rootPath, fullPath);
 
-    // Check exclude patterns first
     const shouldExclude = excludePatterns.some(p => minimatch(relativePath, p, { dot: true, matchBase: true }));
     if (shouldExclude) {
       continue;
     }
 
-    // Check if name matches pattern (case-insensitive)
     if (entry.name.toLowerCase().includes(pattern.toLowerCase())) {
-      results.push(path.relative(process.cwd(), fullPath)); // Return path relative to workspace
+      results.push(path.relative(process.cwd(), fullPath));
     }
 
-    // Recurse into directories
     if (entry.isDirectory()) {
-      // Basic check to prevent infinite loops with symlinks, though validateWorkspacePath should handle main security
       try {
           const realPath = await fs.realpath(fullPath);
-          if (realPath.startsWith(rootPath)) { // Ensure recursion stays within root
+          if (realPath.startsWith(rootPath)) {
              await searchFilesRecursive(rootPath, fullPath, pattern, excludePatterns, results);
           }
       } catch (e) {
-          // Ignore errors reading directories (e.g. permission denied) during search
           console.error(`Skipping search in ${fullPath}: ${(e as Error).message}`);
       }
     }
   }
 }
 
-// file editing and diffing utilities (from example.ts)
 function normalizeLineEndings(text: string): string {
   return text.replace(/\r\n/g, '\n');
 }
@@ -137,10 +128,10 @@ function createUnifiedDiff(originalContent: string, newContent: string, filepath
 }
 
 async function applyFileEdits(
-  filePath: string, // Assumed to be validated absolute path
+  filePath: string,
   edits: z.infer<typeof EditOperationSchema>[],
   dryRun = false
-): Promise<string> { // Returns the diff string
+): Promise<string> {
   const content = normalizeLineEndings(await fs.readFile(filePath, 'utf-8'));
   let modifiedContent = content;
 
@@ -171,7 +162,7 @@ async function applyFileEdits(
             const relativeIndent = newIndent.length - oldIndent.length;
             return originalIndent + ' '.repeat(Math.max(0, relativeIndent)) + line.trimStart();
           }
-          return line; // Keep original indentation if old line had none or new line has none
+          return line;
         });
 
         contentLines.splice(i, oldLines.length, ...newLines);
@@ -192,7 +183,6 @@ async function applyFileEdits(
     await fs.writeFile(filePath, modifiedContent, 'utf-8');
   }
 
-  // Format diff for display
   let numBackticks = 3;
   while (diff.includes('`'.repeat(numBackticks))) {
     numBackticks++;
@@ -207,7 +197,7 @@ interface TreeEntry {
     children?: TreeEntry[];
 }
 
-async function buildDirectoryTree(currentPath: string): Promise<TreeEntry[]> { // Takes validated absolute path
+async function buildDirectoryTree(currentPath: string): Promise<TreeEntry[]> {
     const entries = await fs.readdir(currentPath, {withFileTypes: true});
     const result: TreeEntry[] = [];
 
@@ -219,22 +209,20 @@ async function buildDirectoryTree(currentPath: string): Promise<TreeEntry[]> { /
 
         if (entry.isDirectory()) {
             const subPath = path.join(currentPath, entry.name);
-             // Basic check to prevent infinite loops with symlinks
-            try {
+             try {
                 const realPath = await fs.realpath(subPath);
-                if (realPath.startsWith(path.dirname(currentPath))) { // Ensure recursion stays within parent boundary
+                if (realPath.startsWith(path.dirname(currentPath))) {
                     entryData.children = await buildDirectoryTree(subPath);
                 } else {
-                     entryData.children = []; // Avoid following symlinks outside tree
+                     entryData.children = [];
                 }
             } catch (e) {
-                 entryData.children = []; // Handle errors reading subdirs
+                 entryData.children = [];
                  console.error(`Skipping tree build in ${subPath}: ${(e as Error).message}`);
             }
         }
         result.push(entryData);
     }
-    // Sort entries: directories first, then files, alphabetically
     result.sort((a, b) => {
         if (a.type === 'directory' && b.type === 'file') return -1;
         if (a.type === 'file' && b.type === 'directory') return 1;
@@ -261,17 +249,19 @@ const filesystemToolNames = new Set([
 
 // --- MCP Server Setup ---
 const server = new Server(
-  { name: "vertex-ai-mcp-server", version: "0.5.0" }, // Incremented version for modularization
+  { name: "vertex-ai-mcp-server", version: "0.5.0" },
   { capabilities: { tools: {} } }
 );
 
 // --- Tool Definitions Handler ---
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  // Return the list of tools imported from the tools directory
+  // Use new config function
+  const config = getAIConfig();
   return {
       tools: allTools.map(t => ({
           name: t.name,
-          description: t.description.replace("${modelId}", getVertexAIConfig().modelId), // Inject model ID dynamically
+          // Inject model ID dynamically from new config structure
+          description: t.description.replace("${modelId}", config.modelId),
           inputSchema: t.inputSchema
       }))
   };
@@ -282,7 +272,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const toolName = request.params.name;
   const args = request.params.arguments ?? {};
 
-  // Validate tool exists (applies to all tools)
   const toolDefinition = toolMap.get(toolName);
   if (!toolDefinition) {
     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
@@ -291,202 +280,130 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     // --- Special Handling for Combined Tool ---
     if (toolName === "save_generate_project_guidelines") {
-        // 1. Parse combined args
         const parsedArgs = SaveGenerateProjectGuidelinesArgsSchema.parse(args);
         const { tech_stack, output_path } = parsedArgs;
 
-        // 2. Build the prompt using the tool's logic
-        const config = getVertexAIConfig(); // Get config needed for prompt building
+        // Use new config function
+        const config = getAIConfig();
         const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
-        // 3. Call Vertex AI (similar to the 'else' block below, but using prompt components)
-        const initialContents: Content[] = buildInitialContent(systemInstructionText, userQueryText);
+        // Use new AI function call and type cast
+        const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
         const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
 
-        const generatedContent = await callVertexAIWithOptionalFunctionCalling(
+        const generatedContent = await callGenerativeAI(
             initialContents,
-            toolsForApi,
-            config.modelId,
-            config.temperature,
-            config.useStreaming,
-            config.maxOutputTokens,
-            config.maxRetries,
-            config.retryDelayMs
+            toolsForApi
+            // Config args removed
         );
 
-        // 4. Validate output path
         const validOutputPath = validateWorkspacePath(output_path);
-
-        // 5. Ensure parent directory exists
         await fs.mkdir(path.dirname(validOutputPath), { recursive: true });
-
-        // 6. Write the generated content to the file
         await fs.writeFile(validOutputPath, generatedContent, "utf-8");
 
-        // 7. Return success message
         return {
             content: [{ type: "text", text: `Successfully generated guidelines and saved to ${output_path}` }],
         };
 
-    } else if (toolName === "save_doc_snippet") { // Added case for save_doc_snippet
-        // 1. Parse combined args
+    } else if (toolName === "save_doc_snippet") {
         const parsedArgs = SaveDocSnippetArgsSchema.parse(args);
-        const { output_path } = parsedArgs; // Other args used in buildPrompt
+        const { output_path } = parsedArgs;
 
-        // 2. Build the prompt using the tool's logic
-        const config = getVertexAIConfig();
+        const config = getAIConfig();
         const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
-        // 3. Call Vertex AI
-        const initialContents: Content[] = buildInitialContent(systemInstructionText, userQueryText);
+        const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
         const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
 
-        const generatedContent = await callVertexAIWithOptionalFunctionCalling(
+        const generatedContent = await callGenerativeAI(
             initialContents,
-            toolsForApi,
-            config.modelId,
-            config.temperature,
-            config.useStreaming,
-            config.maxOutputTokens,
-            config.maxRetries,
-            config.retryDelayMs
+            toolsForApi
         );
 
-        // 4. Validate output path
         const validOutputPath = validateWorkspacePath(output_path);
-
-        // 5. Ensure parent directory exists
         await fs.mkdir(path.dirname(validOutputPath), { recursive: true });
-
-        // 6. Write the generated content to the file
         await fs.writeFile(validOutputPath, generatedContent, "utf-8");
 
-        // 7. Return success message
         return {
             content: [{ type: "text", text: `Successfully generated snippet and saved to ${output_path}` }],
         };
 
-    } else if (toolName === "save_topic_explanation") { // Added case for save_topic_explanation
-        // 1. Parse combined args
+    } else if (toolName === "save_topic_explanation") {
         const parsedArgs = SaveTopicExplanationArgsSchema.parse(args);
-        const { output_path } = parsedArgs; // topic, query used in buildPrompt
+        const { output_path } = parsedArgs;
 
-        // 2. Build the prompt using the tool's logic
-        const config = getVertexAIConfig();
+        const config = getAIConfig();
         const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
-        // 3. Call Vertex AI
-        const initialContents: Content[] = buildInitialContent(systemInstructionText, userQueryText);
+        const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
         const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
 
-        const generatedContent = await callVertexAIWithOptionalFunctionCalling(
+        const generatedContent = await callGenerativeAI(
             initialContents,
-            toolsForApi,
-            config.modelId,
-            config.temperature,
-            config.useStreaming,
-            config.maxOutputTokens,
-            config.maxRetries,
-            config.retryDelayMs
+            toolsForApi
         );
 
-        // 4. Validate output path
         const validOutputPath = validateWorkspacePath(output_path);
-
-        // 5. Ensure parent directory exists
         await fs.mkdir(path.dirname(validOutputPath), { recursive: true });
-
-        // 6. Write the generated content to the file
         await fs.writeFile(validOutputPath, generatedContent, "utf-8");
 
-        // 7. Return success message
         return {
             content: [{ type: "text", text: `Successfully generated explanation and saved to ${output_path}` }],
         };
 
-    } else if (toolName === "save_answer_query_direct") { // Added case for save_answer_query_direct
-        // 1. Parse args
+    } else if (toolName === "save_answer_query_direct") {
         const parsedArgs = SaveAnswerQueryDirectArgsSchema.parse(args);
-        const { output_path } = parsedArgs; // query used in buildPrompt
+        const { output_path } = parsedArgs;
 
-        // 2. Build the prompt using the tool's logic
-        const config = getVertexAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId); // useWebSearch will be false
+        const config = getAIConfig();
+        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
-        // 3. Call Vertex AI
-        const initialContents: Content[] = buildInitialContent(systemInstructionText, userQueryText);
+        const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
         const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
 
-        const generatedContent = await callVertexAIWithOptionalFunctionCalling(
+        const generatedContent = await callGenerativeAI(
             initialContents,
-            toolsForApi,
-            config.modelId,
-            config.temperature,
-            config.useStreaming,
-            config.maxOutputTokens,
-            config.maxRetries,
-            config.retryDelayMs
+            toolsForApi
         );
 
-        // 4. Validate output path
         const validOutputPath = validateWorkspacePath(output_path);
-
-        // 5. Ensure parent directory exists
         await fs.mkdir(path.dirname(validOutputPath), { recursive: true });
-
-        // 6. Write the generated content to the file
         await fs.writeFile(validOutputPath, generatedContent, "utf-8");
 
-        // 7. Return success message
         return {
             content: [{ type: "text", text: `Successfully generated direct answer and saved to ${output_path}` }],
         };
 
-    } else if (toolName === "save_answer_query_websearch") { // Added case for save_answer_query_websearch
-        // 1. Parse args
+    } else if (toolName === "save_answer_query_websearch") {
         const parsedArgs = SaveAnswerQueryWebsearchArgsSchema.parse(args);
-        const { output_path } = parsedArgs; // query used in buildPrompt
+        const { output_path } = parsedArgs;
 
-        // 2. Build the prompt using the tool's logic
-        const config = getVertexAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId); // useWebSearch will be true
+        const config = getAIConfig();
+        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
-        // 3. Call Vertex AI
-        const initialContents: Content[] = buildInitialContent(systemInstructionText, userQueryText);
+        const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
         const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
 
-        const generatedContent = await callVertexAIWithOptionalFunctionCalling(
+        const generatedContent = await callGenerativeAI(
             initialContents,
-            toolsForApi,
-            config.modelId,
-            config.temperature,
-            config.useStreaming,
-            config.maxOutputTokens,
-            config.maxRetries,
-            config.retryDelayMs
+            toolsForApi
         );
 
-        // 4. Validate output path
         const validOutputPath = validateWorkspacePath(output_path);
-
-        // 5. Ensure parent directory exists
         await fs.mkdir(path.dirname(validOutputPath), { recursive: true });
-
-        // 6. Write the generated content to the file
         await fs.writeFile(validOutputPath, generatedContent, "utf-8");
 
-        // 7. Return success message
         return {
             content: [{ type: "text", text: `Successfully generated websearch answer and saved to ${output_path}` }],
         };
 
     } // --- Filesystem Tool Execution Logic ---
     else if (filesystemToolNames.has(toolName)) {
-      let resultText = ""; // To store success messages or data
+      let resultText = "";
 
       switch (toolName) {
         case "read_file_content": {
-          const parsed = ReadFileArgsSchema.parse(args); // Use parse, throws on error
+          const parsed = ReadFileArgsSchema.parse(args);
           const validPath = validateWorkspacePath(parsed.path);
           const content = await fs.readFile(validPath, "utf-8");
           resultText = content;
@@ -499,7 +416,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               try {
                 const validPath = validateWorkspacePath(filePath);
                 const content = await fs.readFile(validPath, "utf-8");
-                // Return relative path for clarity
                 return `${path.relative(process.cwd(), validPath)}:\n${content}\n`;
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
@@ -513,7 +429,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         case "write_file_content": {
           const parsed = WriteFileArgsSchema.parse(args);
           const validPath = validateWorkspacePath(parsed.path);
-          // Ensure parent directory exists before writing
           await fs.mkdir(path.dirname(validPath), { recursive: true });
           await fs.writeFile(validPath, parsed.content, "utf-8");
           resultText = `Successfully wrote to ${parsed.path}`;
@@ -541,7 +456,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const entries = await fs.readdir(validPath, { withFileTypes: true });
           resultText = entries
             .map((entry) => `${entry.isDirectory() ? "[DIR] " : "[FILE]"} ${entry.name}`)
-            .sort() // Sort alphabetically
+            .sort()
             .join("\n");
            if (!resultText) resultText = "(Directory is empty)";
           break;
@@ -550,7 +465,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const parsed = DirectoryTreeArgsSchema.parse(args);
             const validPath = validateWorkspacePath(parsed.path);
             const treeData = await buildDirectoryTree(validPath);
-            resultText = JSON.stringify(treeData, null, 2); // Pretty print JSON
+            resultText = JSON.stringify(treeData, null, 2);
             break;
         }
         case "move_file_or_directory": {
@@ -560,7 +475,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
            }
           const validSourcePath = validateWorkspacePath(parsed.source);
           const validDestPath = validateWorkspacePath(parsed.destination);
-           // Ensure parent directory of destination exists
           await fs.mkdir(path.dirname(validDestPath), { recursive: true });
           await fs.rename(validSourcePath, validDestPath);
           resultText = `Successfully moved ${parsed.source} to ${parsed.destination}`;
@@ -578,12 +492,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const parsed = GetFileInfoArgsSchema.parse(args);
           const validPath = validateWorkspacePath(parsed.path);
           const info = await getFileStats(validPath);
-          // Format output for better readability
           resultText = `Path: ${parsed.path}\nType: ${info.isDirectory ? 'Directory' : 'File'}\nSize: ${info.size} bytes\nCreated: ${info.created.toISOString()}\nModified: ${info.modified.toISOString()}\nAccessed: ${info.accessed.toISOString()}\nPermissions: ${info.permissions}`;
           break;
         }
         default:
-          // This case should technically not be reachable due to filesystemToolNames check
           throw new McpError(ErrorCode.MethodNotFound, `Filesystem tool handler not implemented: ${toolName}`);
       }
 
@@ -593,21 +505,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
 
     } else {
-      // --- Existing Vertex AI Tool Logic ---
-      const config = getVertexAIConfig();
+      // --- Generic AI Tool Logic (Non-filesystem, non-combined) ---
+      const config = getAIConfig(); // Use renamed config function
+      if (!toolDefinition.buildPrompt) {
+        throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} is missing required buildPrompt logic.`);
+      }
       const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
-      const initialContents: Content[] = buildInitialContent(systemInstructionText, userQueryText);
+      const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[]; // Cast
       const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
 
-      const responseText = await callVertexAIWithOptionalFunctionCalling(
+      // Call the unified AI function
+      const responseText = await callGenerativeAI(
           initialContents,
-          toolsForApi,
-          config.modelId,
-          config.temperature,
-          config.useStreaming,
-          config.maxOutputTokens,
-          config.maxRetries,
-          config.retryDelayMs
+          toolsForApi
+          // Config is implicitly used by callGenerativeAI now
       );
 
       return {
@@ -618,16 +529,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } catch (error) {
      // Centralized error handling
     if (error instanceof z.ZodError) {
-        // Handle Zod validation errors specifically
         throw new McpError(ErrorCode.InvalidParams, `Invalid arguments for ${toolName}: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
     } else if (error instanceof McpError) {
-      // Re-throw known MCP errors
       throw error;
     } else if (error instanceof Error && error.message.includes('ENOENT')) {
-        // Handle file/dir not found errors more gracefully
          throw new McpError(ErrorCode.InvalidParams, `Path not found for tool ${toolName}: ${error.message}`);
     } else {
-      // Wrap other unexpected errors
       console.error(`[${new Date().toISOString()}] Unexpected error in tool handler (${toolName}):`, error);
       throw new McpError(ErrorCode.InternalError, `Unexpected server error during ${toolName}: ${(error as Error).message || "Unknown"}`);
     }
