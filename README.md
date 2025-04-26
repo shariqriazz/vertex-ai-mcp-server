@@ -1,4 +1,5 @@
 # Vertex AI MCP Server
+[![smithery badge](https://smithery.ai/badge/@shariqriazz/vertex-ai-mcp-server)](https://smithery.ai/server/@shariqriazz/vertex-ai-mcp-server)
 
 This project implements a Model Context Protocol (MCP) server that provides a comprehensive suite of tools for interacting with Google Cloud's Vertex AI Gemini models, focusing on coding assistance and general query answering.
 
@@ -87,6 +88,14 @@ vertex-ai-mcp-server
 ```
 
 **Note:** Running standalone requires setting necessary environment variables (like `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, authentication credentials if not using ADC) in your shell environment before executing the command.
+
+### Installing via Smithery
+
+To install Vertex AI Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@shariqriazz/vertex-ai-mcp-server):
+
+```bash
+npx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
+```
 
 ## Running with Cline
 
