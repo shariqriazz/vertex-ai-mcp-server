@@ -179,6 +179,7 @@ npx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
     }
     ```
     *   Ensure the environment variables in the `env` block are correctly set, either matching `.env` or explicitly defined here. Remove comments from the actual JSON file.
+    * The names for the most recent Gemini API can be found here: [Gemini Models - https://ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models)
 
 2.  **Restart/Reload Cline:** Cline should detect the configuration change and start the server.
 
