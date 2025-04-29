@@ -14,8 +14,8 @@ export const GCLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "us-central1
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // --- Common AI Configuration Defaults ---
-const DEFAULT_VERTEX_MODEL_ID = "gemini-1.5-pro-latest";
-const DEFAULT_GEMINI_MODEL_ID = "gemini-1.5-flash-latest";
+const DEFAULT_VERTEX_MODEL_ID = "gemini-2.5-pro-exp-03-25";
+const DEFAULT_GEMINI_MODEL_ID = "gemini-2.5-pro-exp-03-25";
 const DEFAULT_TEMPERATURE = 0.0;
 const DEFAULT_USE_STREAMING = true;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
