@@ -63,7 +63,10 @@ This project implements a Model Context Protocol (MCP) server that provides a co
     ```
 3.  **Configure Environment:**
     *   Create a `.env` file in the project root (copy `.env.example`).
-    *   Set the required and optional environment variables as described in `.env.example`. Ensure `GOOGLE_CLOUD_PROJECT` is set.
+    *   Set the required and optional environment variables as described in `.env.example`.
+        *   Set `AI_PROVIDER` to either `"vertex"` or `"gemini"`.
+        *   If `AI_PROVIDER="vertex"`, `GOOGLE_CLOUD_PROJECT` is required.
+        *   If `AI_PROVIDER="gemini"`, `GEMINI_API_KEY` is required.
 4.  **Build the Server:**
     ```bash
     bun run build
@@ -76,13 +79,13 @@ Once published to npm, you can run this server directly using `npx`:
 
 ```bash
 # Ensure required environment variables are set (e.g., GOOGLE_CLOUD_PROJECT)
-npx vertex-ai-mcp-server
+bunx vertex-ai-mcp-server
 ```
 
 Alternatively, install it globally:
 
 ```bash
-npm install -g vertex-ai-mcp-server
+bun install -g vertex-ai-mcp-server
 # Then run:
 vertex-ai-mcp-server
 ```
@@ -94,7 +97,7 @@ vertex-ai-mcp-server
 To install Vertex AI Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@shariqriazz/vertex-ai-mcp-server):
 
 ```bash
-npx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
+bunx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
 ```
 
 ## Running with Cline
@@ -114,18 +117,23 @@ npx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
             "/full/path/to/your/vertex-ai-mcp-server/build/index.js" // Use absolute path or ensure it's relative to where Cline runs node
           ],
           "env": {
-            // Required: Ensure these match your .env or are set here
-            "GOOGLE_CLOUD_PROJECT": "YOUR_GCP_PROJECT_ID",
-            "GOOGLE_CLOUD_LOCATION": "us-central1",
-            // Required if not using ADC:
-            // "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/service-account-key.json",
-            // Optional overrides:
-            "VERTEX_AI_MODEL_ID": "gemini-2.5-pro-exp-03-25",
-            "VERTEX_AI_TEMPERATURE": "0.0",
-            "VERTEX_AI_USE_STREAMING": "true",
-            "VERTEX_AI_MAX_OUTPUT_TOKENS": "65535",
-            "VERTEX_AI_MAX_RETRIES": "3",
-            "VERTEX_AI_RETRY_DELAY_MS": "1000"
+            // --- General AI Configuration ---
+            "AI_PROVIDER": "vertex", // "vertex" or "gemini"
+            // --- Required (Conditional) ---
+            "GOOGLE_CLOUD_PROJECT": "YOUR_GCP_PROJECT_ID", // Required if AI_PROVIDER="vertex"
+            // "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY", // Required if AI_PROVIDER="gemini"
+            // --- Optional Model Selection ---
+            "VERTEX_MODEL_ID": "gemini-2.5-pro-exp-03-25", // If AI_PROVIDER="vertex" (Example override)
+            "GEMINI_MODEL_ID": "gemini-1.5-flash-latest", // If AI_PROVIDER="gemini"
+            // --- Optional AI Parameters ---
+            "GOOGLE_CLOUD_LOCATION": "us-central1", // Specific to Vertex AI
+            "AI_TEMPERATURE": "0.0",
+            "AI_USE_STREAMING": "true",
+            "AI_MAX_OUTPUT_TOKENS": "8192", // Default from .env.example
+            "AI_MAX_RETRIES": "3",
+            "AI_RETRY_DELAY_MS": "1000",
+            // --- Optional Vertex Authentication ---
+            // "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/service-account-key.json" // If using Service Account Key for Vertex
           },
           "disabled": false,
           "alwaysAllow": [
@@ -148,24 +156,29 @@ npx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
     {
       "mcpServers": {
         "vertex-ai-mcp-server": {
-          "command": "npx", // Use npx
+          "command": "bunx", // Use bunx
           "args": [
             "-y", // Auto-confirm installation
             "vertex-ai-mcp-server" // The npm package name
           ],
           "env": {
-            // Required: Ensure these match your .env or are set here
-            "GOOGLE_CLOUD_PROJECT": "YOUR_GCP_PROJECT_ID",
-            "GOOGLE_CLOUD_LOCATION": "us-central1",
-            // Required if not using ADC:
-            // "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/service-account-key.json",
-            // Optional overrides:
-            "VERTEX_AI_MODEL_ID": "gemini-2.5-pro-exp-03-25",
-            "VERTEX_AI_TEMPERATURE": "0.0",
-            "VERTEX_AI_USE_STREAMING": "true",
-            "VERTEX_AI_MAX_OUTPUT_TOKENS": "65535",
-            "VERTEX_AI_MAX_RETRIES": "3",
-            "VERTEX_AI_RETRY_DELAY_MS": "1000"
+            // --- General AI Configuration ---
+            "AI_PROVIDER": "vertex", // "vertex" or "gemini"
+            // --- Required (Conditional) ---
+            "GOOGLE_CLOUD_PROJECT": "YOUR_GCP_PROJECT_ID", // Required if AI_PROVIDER="vertex"
+            // "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY", // Required if AI_PROVIDER="gemini"
+            // --- Optional Model Selection ---
+            "VERTEX_MODEL_ID": "gemini-2.5-pro-exp-03-25", // If AI_PROVIDER="vertex" (Example override)
+            "GEMINI_MODEL_ID": "gemini-1.5-flash-latest", // If AI_PROVIDER="gemini"
+            // --- Optional AI Parameters ---
+            "GOOGLE_CLOUD_LOCATION": "us-central1", // Specific to Vertex AI
+            "AI_TEMPERATURE": "0.0",
+            "AI_USE_STREAMING": "true",
+            "AI_MAX_OUTPUT_TOKENS": "8192", // Default from .env.example
+            "AI_MAX_RETRIES": "3",
+            "AI_RETRY_DELAY_MS": "1000",
+            // --- Optional Vertex Authentication ---
+            // "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/service-account-key.json" // If using Service Account Key for Vertex
           },
           "disabled": false,
           "alwaysAllow": [
