@@ -129,7 +129,7 @@ bunx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
             "GOOGLE_CLOUD_LOCATION": "us-central1", // Specific to Vertex AI
             "AI_TEMPERATURE": "0.0",
             "AI_USE_STREAMING": "true",
-            "AI_MAX_OUTPUT_TOKENS": "8192", // Default from .env.example
+            "AI_MAX_OUTPUT_TOKENS": "65536", // Default from .env.example
             "AI_MAX_RETRIES": "3",
             "AI_RETRY_DELAY_MS": "1000",
             // --- Optional Vertex Authentication ---
@@ -174,7 +174,7 @@ bunx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
             "GOOGLE_CLOUD_LOCATION": "us-central1", // Specific to Vertex AI
             "AI_TEMPERATURE": "0.0",
             "AI_USE_STREAMING": "true",
-            "AI_MAX_OUTPUT_TOKENS": "8192", // Default from .env.example
+            "AI_MAX_OUTPUT_TOKENS": "65536", // Default from .env.example
             "AI_MAX_RETRIES": "3",
             "AI_RETRY_DELAY_MS": "1000",
             // --- Optional Vertex Authentication ---
