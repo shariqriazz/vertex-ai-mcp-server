@@ -124,7 +124,7 @@ bunx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
             // "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY", // Required if AI_PROVIDER="gemini"
             // --- Optional Model Selection ---
             "VERTEX_MODEL_ID": "gemini-2.5-pro-exp-03-25", // If AI_PROVIDER="vertex" (Example override)
-            "GEMINI_MODEL_ID": "gemini-1.5-flash-latest", // If AI_PROVIDER="gemini"
+            "GEMINI_MODEL_ID": "gemini-2.5-pro-exp-03-25", // If AI_PROVIDER="gemini"
             // --- Optional AI Parameters ---
             "GOOGLE_CLOUD_LOCATION": "us-central1", // Specific to Vertex AI
             "AI_TEMPERATURE": "0.0",
@@ -169,7 +169,7 @@ bunx -y @smithery/cli install @shariqriazz/vertex-ai-mcp-server --client claude
             // "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY", // Required if AI_PROVIDER="gemini"
             // --- Optional Model Selection ---
             "VERTEX_MODEL_ID": "gemini-2.5-pro-exp-03-25", // If AI_PROVIDER="vertex" (Example override)
-            "GEMINI_MODEL_ID": "gemini-1.5-flash-latest", // If AI_PROVIDER="gemini"
+            "GEMINI_MODEL_ID": "gemini-2.5-pro-exp-03-25", // If AI_PROVIDER="gemini"
             // --- Optional AI Parameters ---
             "GOOGLE_CLOUD_LOCATION": "us-central1", // Specific to Vertex AI
             "AI_TEMPERATURE": "0.0",
