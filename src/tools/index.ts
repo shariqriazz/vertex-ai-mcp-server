@@ -24,6 +24,18 @@ import { saveTopicExplanationTool } from "./save_topic_explanation.js";
 import { saveAnswerQueryDirectTool } from "./save_answer_query_direct.js";
 import { saveAnswerQueryWebsearchTool } from "./save_answer_query_websearch.js";
 
+// Import new research-oriented tools
+import { codeAnalysisWithDocsTool } from "./code_analysis_with_docs.js";
+import { technicalComparisonTool } from "./technical_comparison.js";
+import { architecturePatternRecommendationTool } from "./architecture_pattern_recommendation.js";
+import { dependencyVulnerabilityScanTool } from "./dependency_vulnerability_scan.js";
+import { databaseSchemaAnalyzerTool } from "./database_schema_analyzer.js";
+import { securityBestPracticesAdvisorTool } from "./security_best_practices_advisor.js";
+import { testingStrategyGeneratorTool } from "./testing_strategy_generator.js";
+import { regulatoryComplianceAdvisorTool } from "./regulatory_compliance_advisor.js";
+import { microserviceDesignAssistantTool } from "./microservice_design_assistant.js";
+import { documentationGeneratorTool } from "./documentation_generator.js";
+
 
 export const allTools: ToolDefinition[] = [
     // Query & Generation Tools
@@ -51,6 +63,18 @@ export const allTools: ToolDefinition[] = [
     // Removed old save_query_answer, added new specific ones
     saveAnswerQueryDirectTool,
     saveAnswerQueryWebsearchTool,
+    
+    // New research-oriented tools
+    codeAnalysisWithDocsTool,
+    technicalComparisonTool,
+    architecturePatternRecommendationTool,
+    dependencyVulnerabilityScanTool,
+    databaseSchemaAnalyzerTool,
+    securityBestPracticesAdvisorTool,
+    testingStrategyGeneratorTool,
+    regulatoryComplianceAdvisorTool,
+    microserviceDesignAssistantTool,
+    documentationGeneratorTool,
 ];
 
 // Create a map for easy lookup

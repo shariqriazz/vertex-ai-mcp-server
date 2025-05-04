@@ -1,6 +1,6 @@
 {
   "name": "vertex-ai-mcp-server",
-  "version": "0.3.0",
+  "version": "0.3.5",
   "description": "A Model Context Protocol server supporting Vertex AI and Gemini API",
   "license": "MIT",
   "type": "module",
