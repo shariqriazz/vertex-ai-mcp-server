@@ -26,16 +26,15 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 *   `generate_project_guidelines`: Generates a structured project guidelines document (Markdown) based on a specified list of technologies (optionally with versions), using web search for best practices.
 
 ### Filesystem Operations
-*   `read_file_content`: Reads the complete contents of a single file.
-*   `read_multiple_files_content`: Reads the contents of multiple files simultaneously.
-*   `write_file_content`: Creates a new file or completely overwrites an existing file with new content.
+*   `read_file_content`: Read the complete contents of one or more files. Provide a single path string or an array of path strings.
+*   `write_file_content`: Create new files or completely overwrite existing files. The 'writes' argument accepts a single object (`{path, content}`) or an array of such objects.
 *   `edit_file_content`: Makes line-based edits to a text file, returning a diff preview or applying changes.
-*   `create_directory`: Creates a new directory (including nested directories).
 *   `list_directory_contents`: Lists files and directories directly within a specified path (non-recursive).
 *   `get_directory_tree`: Gets a recursive tree view of files and directories as JSON.
 *   `move_file_or_directory`: Moves or renames files and directories.
 *   `search_filesystem`: Recursively searches for files/directories matching a name pattern, with optional exclusions.
 *   `get_filesystem_info`: Retrieves detailed metadata (size, dates, type, permissions) about a file or directory.
+*   `execute_terminal_command`: Execute a shell command, optionally specifying `cwd` and `timeout`. Returns stdout/stderr.
 
 ### Combined AI + Filesystem Operations
 *   `save_generate_project_guidelines`: Generates project guidelines based on a tech stack and saves the result to a specified file path.

@@ -20,6 +20,8 @@ import fs from "fs/promises";
 import { z } from "zod"; // Needed for schema parsing within handler
 import { diffLines, createTwoFilesPatch } from 'diff';
 import { minimatch } from 'minimatch';
+import { exec } from 'child_process'; // Added for command execution
+import util from 'util'; // Added for promisify
 
 import { getAIConfig } from './config.js';
 // Import CombinedContent along with callGenerativeAI
@@ -29,10 +31,10 @@ import { buildInitialContent, getToolsForApi } from './tools/tool_definition.js'
 
 // Import Zod schemas from tool files for validation within the handler
 import { ReadFileArgsSchema } from './tools/read_file.js';
-import { ReadMultipleFilesArgsSchema } from './tools/read_multiple_files.js';
+// import { ReadMultipleFilesArgsSchema } from './tools/read_multiple_files.js'; // Removed
 import { WriteFileArgsSchema } from './tools/write_file.js';
 import { EditFileArgsSchema, EditOperationSchema } from './tools/edit_file.js'; // Import EditOperationSchema too
-import { CreateDirectoryArgsSchema } from './tools/create_directory.js';
+// import { CreateDirectoryArgsSchema } from './tools/create_directory.js'; // Removed
 import { ListDirectoryArgsSchema } from './tools/list_directory.js';
 import { DirectoryTreeArgsSchema } from './tools/directory_tree.js';
 import { MoveFileArgsSchema } from './tools/move_file.js';
@@ -44,6 +46,7 @@ import { SaveDocSnippetArgsSchema } from './tools/save_doc_snippet.js';
 import { SaveTopicExplanationArgsSchema } from './tools/save_topic_explanation.js';
 import { SaveAnswerQueryDirectArgsSchema } from './tools/save_answer_query_direct.js';
 import { SaveAnswerQueryWebsearchArgsSchema } from './tools/save_answer_query_websearch.js';
+import { ExecuteTerminalCommandArgsSchema } from './tools/execute_terminal_command.js'; // Renamed
 
 
 // --- Filesystem Helper Functions (Adapted from example.ts) ---
@@ -234,11 +237,11 @@ async function buildDirectoryTree(currentPath: string): Promise<TreeEntry[]> {
 
 // Set of filesystem tool names for easy checking
 const filesystemToolNames = new Set([
-    "read_file_content",
-    "read_multiple_files_content",
-    "write_file_content",
+    "read_file_content", // Handles single/multiple
+    // "read_multiple_files_content", // Removed
+    "write_file_content", // Handles single/multiple
     "edit_file_content",
-    "create_directory",
+    // "create_directory", // Removed
     "list_directory_contents",
     "get_directory_tree",
     "move_file_or_directory",
@@ -404,34 +407,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       switch (toolName) {
         case "read_file_content": {
           const parsed = ReadFileArgsSchema.parse(args);
-          const validPath = validateWorkspacePath(parsed.path);
-          const content = await fs.readFile(validPath, "utf-8");
-          resultText = content;
+          if (typeof parsed.paths === 'string') {
+            // Handle single file read
+            const validPath = validateWorkspacePath(parsed.paths);
+            const content = await fs.readFile(validPath, "utf-8");
+            resultText = content;
+          } else {
+            // Handle multiple file read (similar to old read_multiple_files_content)
+            const results = await Promise.all(
+              parsed.paths.map(async (filePath: string) => {
+                try {
+                  const validPath = validateWorkspacePath(filePath);
+                  const content = await fs.readFile(validPath, "utf-8");
+                  return `${path.relative(process.cwd(), validPath)}:\n${content}\n`;
+                } catch (error) {
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  return `${filePath}: Error - ${errorMessage}`;
+                }
+              }),
+            );
+            resultText = results.join("\n---\n");
+          }
           break;
         }
-        case "read_multiple_files_content": {
-          const parsed = ReadMultipleFilesArgsSchema.parse(args);
-          const results = await Promise.all(
-            parsed.paths.map(async (filePath: string) => {
-              try {
-                const validPath = validateWorkspacePath(filePath);
-                const content = await fs.readFile(validPath, "utf-8");
-                return `${path.relative(process.cwd(), validPath)}:\n${content}\n`;
-              } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                return `${filePath}: Error - ${errorMessage}`;
-              }
-            }),
-          );
-          resultText = results.join("\n---\n");
-          break;
-        }
+        // case "read_multiple_files_content": // Removed - logic merged into read_file_content
         case "write_file_content": {
           const parsed = WriteFileArgsSchema.parse(args);
-          const validPath = validateWorkspacePath(parsed.path);
-          await fs.mkdir(path.dirname(validPath), { recursive: true });
-          await fs.writeFile(validPath, parsed.content, "utf-8");
-          resultText = `Successfully wrote to ${parsed.path}`;
+          // Access the 'writes' property which contains either a single object or an array
+          const writeOperations = Array.isArray(parsed.writes) ? parsed.writes : [parsed.writes];
+          const results: string[] = [];
+
+          for (const op of writeOperations) {
+              try {
+                  const validPath = validateWorkspacePath(op.path);
+                  await fs.mkdir(path.dirname(validPath), { recursive: true });
+                  await fs.writeFile(validPath, op.content, "utf-8");
+                  results.push(`Successfully wrote to ${op.path}`);
+              } catch (error) {
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  results.push(`Error writing to ${op.path}: ${errorMessage}`);
+              }
+          }
+          resultText = results.join("\n");
           break;
         }
         case "edit_file_content": {
@@ -443,13 +460,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           resultText = await applyFileEdits(validPath, parsed.edits, parsed.dryRun);
           break;
         }
-        case "create_directory": {
-          const parsed = CreateDirectoryArgsSchema.parse(args);
-          const validPath = validateWorkspacePath(parsed.path);
-          await fs.mkdir(validPath, { recursive: true });
-          resultText = `Successfully created directory ${parsed.path}`;
-          break;
-        }
+        // case "create_directory": // Removed
         case "list_directory_contents": {
           const parsed = ListDirectoryArgsSchema.parse(args);
           const validPath = validateWorkspacePath(parsed.path);
@@ -503,6 +514,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{ type: "text", text: resultText }],
       };
+} else if (toolName === "execute_terminal_command") { // Renamed tool name check
+    const parsed = ExecuteTerminalCommandArgsSchema.parse(args); // Renamed schema
+    const execPromise = util.promisify(exec);
+
+    const options: { cwd?: string; timeout?: number; signal?: AbortSignal } = {};
+        if (parsed.cwd) {
+            options.cwd = validateWorkspacePath(parsed.cwd); // Reuse validation
+        } else {
+            options.cwd = process.cwd(); // Default to workspace root
+        }
+
+        let controller: AbortController | undefined;
+        if (parsed.timeout) {
+            controller = new AbortController();
+            options.signal = controller.signal;
+            options.timeout = parsed.timeout * 1000; // Convert seconds to milliseconds
+        }
+
+        try {
+            // Execute the command
+            const { stdout, stderr } = await execPromise(parsed.command, options);
+            const output = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
+            return {
+                content: [{ type: "text", text: output.trim() || "(No output)" }],
+            };
+        } catch (error: any) {
+            // Handle different error types
+            let errorMessage = "Command execution failed.";
+            if (error.signal === 'SIGTERM' || error.code === 'ABORT_ERR') {
+                errorMessage = `Command timed out after ${parsed.timeout} seconds.`;
+            } else if (error.stderr || error.stdout) {
+                errorMessage = `Command failed with exit code ${error.code || 'unknown'}.\nSTDOUT:\n${error.stdout}\nSTDERR:\n${error.stderr}`;
+            } else if (error instanceof Error) {
+                errorMessage = `Command execution error: ${error.message}`;
+            }
+            throw new McpError(ErrorCode.InternalError, errorMessage);
+        } finally {
+             // The finally block might not be strictly necessary here as execPromise handles cleanup
+             // if (controller) { controller.abort(); } // Example if manual cleanup were needed
+        }
 
     } else {
       // --- Generic AI Tool Logic (Non-filesystem, non-combined) ---
