@@ -1,6 +1,4 @@
-import * as vertexAi from "@google-cloud/vertexai";
-// Correctly import Gemini types only from @google/generative-ai
-import { HarmCategory as GenaiHarmCategory, HarmBlockThreshold as GenaiHarmBlockThreshold } from "@google/generative-ai";
+import { HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 // --- Provider Configuration ---
 export type AIProvider = "vertex" | "gemini";
@@ -27,18 +25,18 @@ export const WORKSPACE_ROOT = process.cwd();
 // --- Safety Settings ---
 // For Vertex AI (@google-cloud/vertexai)
 export const vertexSafetySettings = [
-    { category: vertexAi.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: vertexAi.HarmBlockThreshold.BLOCK_NONE },
-    { category: vertexAi.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: vertexAi.HarmBlockThreshold.BLOCK_NONE },
-    { category: vertexAi.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: vertexAi.HarmBlockThreshold.BLOCK_NONE },
-    { category: vertexAi.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: vertexAi.HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
 // For Gemini API (@google/generative-ai) - using corrected imports
 export const geminiSafetySettings = [
-    { category: GenaiHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: GenaiHarmBlockThreshold.BLOCK_NONE },
-    { category: GenaiHarmCategory.HARM_CATEGORY_HARASSMENT, threshold: GenaiHarmBlockThreshold.BLOCK_NONE },
-    { category: GenaiHarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: GenaiHarmBlockThreshold.BLOCK_NONE },
-    { category: GenaiHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: GenaiHarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
 // --- Validation ---

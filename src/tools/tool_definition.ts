@@ -1,5 +1,5 @@
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import { Content, Tool } from "@google-cloud/vertexai";
+import type { Content, Tool } from "@google/genai";
 
 export interface ToolDefinition {
     name: string;

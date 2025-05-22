@@ -1,8 +1,13 @@
-import * as vertexAiSdk from "@google-cloud/vertexai";
-// Correct import: Use @google/generative-ai
-import { GoogleGenerativeAI } from "@google/generative-ai";
-// Import specific types needed, alias Content and explicitly import SafetySetting
-import type { Content as GoogleGeneraiContent, GenerationConfig, SafetySetting, FunctionDeclaration } from "@google/generative-ai";
+import {
+  GoogleGenAI,
+  HarmCategory,
+  HarmBlockThreshold,
+  type Content,
+  type GenerationConfig,
+  type SafetySetting,
+  type FunctionDeclaration,
+  type Tool
+} from "@google/genai";
 
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 // Import getAIConfig and original safety setting definitions from config
@@ -12,35 +17,33 @@ import { sleep } from './utils.js';
 // --- Configuration and Client Initialization ---
 const aiConfig = getAIConfig();
 // Use correct client types
-let generativeClient: vertexAiSdk.VertexAI | GoogleGenerativeAI;
+let ai: GoogleGenAI;
 
 try {
-    if (aiConfig.provider === 'vertex') {
-        if (!aiConfig.gcpProjectId || !aiConfig.gcpLocation) {
-            throw new Error("Missing GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_LOCATION for Vertex AI provider.");
-        }
-        generativeClient = new vertexAiSdk.VertexAI({ project: aiConfig.gcpProjectId, location: aiConfig.gcpLocation });
-        console.log(`Initialized Vertex AI client for project ${aiConfig.gcpProjectId} in ${aiConfig.gcpLocation}`);
-    } else { // gemini
-        if (!aiConfig.geminiApiKey) {
-            throw new Error("Missing GEMINI_API_KEY for Gemini provider.");
-        }
-        // Instantiate using the correct package
-        generativeClient = new GoogleGenerativeAI(aiConfig.geminiApiKey);
-        console.log("Initialized Gemini API client (@google/generative-ai)");
+    if (aiConfig.geminiApiKey) {
+        ai = new GoogleGenAI({ apiKey: aiConfig.geminiApiKey });
+    } else if (aiConfig.gcpProjectId && aiConfig.gcpLocation) {
+        ai = new GoogleGenAI({
+            vertexai: true,
+            project: aiConfig.gcpProjectId,
+            location: aiConfig.gcpLocation
+        });
+    } else {
+        throw new Error("Missing Gemini API key or Vertex AI project/location configuration.");
     }
+    console.log("Initialized GoogleGenAI with config:", aiConfig.modelId);
 } catch (error: any) {
-    console.error(`Error initializing ${aiConfig.provider} AI client:`, error.message);
+    console.error(`Error initializing GoogleGenAI:`, error.message);
     process.exit(1);
 }
 
 // Define a union type for Content
-export type CombinedContent = vertexAiSdk.Content | GoogleGeneraiContent;
+export type CombinedContent = Content;
 
 // --- Unified AI Call Function ---
 export async function callGenerativeAI(
     initialContents: CombinedContent[],
-    tools: vertexAiSdk.Tool[] | undefined // Still expect Vertex Tool format initially
+    tools: Tool[] | undefined
 ): Promise<string> {
 
     const {
@@ -75,37 +78,13 @@ export async function callGenerativeAI(
 
 
     // Get appropriate model instance
-    let vertexModelInstance: any | undefined;
-    let geminiModelInstance: ReturnType<GoogleGenerativeAI['getGenerativeModel']> | undefined;
-
-    if (provider === 'vertex') {
-        vertexModelInstance = isGroundingRequested
-            ? (generativeClient as vertexAiSdk.VertexAI).preview.getGenerativeModel({ model: modelId })
-            : (generativeClient as vertexAiSdk.VertexAI).getGenerativeModel({ model: modelId });
-    } else { // gemini
-         geminiModelInstance = (generativeClient as GoogleGenerativeAI).getGenerativeModel({
-             model: modelId,
-             // Safety settings/genConfig are passed to generateContent for @google/generative-ai
-         });
-    }
+    // Unified model instance
+    // generativeModel is already initialized above
 
     // --- Prepare Request Parameters (differ slightly between SDKs) ---
-    const commonGenConfig = { temperature, maxOutputTokens };
-    // Use the correctly typed settings imported from config
-    const resolvedVertexSafetySettings: vertexAiSdk.SafetySetting[] = vertexSafetySettings;
-    const resolvedGeminiSafetySettings: SafetySetting[] = configGeminiSafetySettings;
-
-    // Safety settings variable is not needed, pass directly below
-
-
-    const vertexRequest: vertexAiSdk.GenerateContentRequest = {
-        contents: initialContents as vertexAiSdk.Content[],
-        generationConfig: commonGenConfig,
-        safetySettings: resolvedVertexSafetySettings, // Pass correct settings
-        tools: filteredToolsForVertex
-    };
-    // @google/generative-ai takes config in generateContent call
-    const geminiGenConfig: GenerationConfig = commonGenConfig;
+    const commonGenConfig: GenerationConfig = { temperature, maxOutputTokens };
+    const resolvedSafetySettings: SafetySetting[] = aiConfig.provider === "vertex" ? vertexSafetySettings : configGeminiSafetySettings;
+    // All requests will use generativeModel.generateContent or generateContentStream
 
 
     // --- Execute Request with Retries ---
@@ -117,138 +96,85 @@ export async function callGenerativeAI(
             let responseText: string | undefined;
 
             if (useStreaming) {
+
+                const stream = await ai.models.generateContentStream({
+                    model: modelId,
+                    contents: initialContents,
+                    ...(tools && tools.length > 0
+                        ? { config: { tools } }
+                        : {})
+                });
                 let accumulatedText = "";
-                let finalAggregatedResponse: any;
 
-                if (provider === 'vertex') {
-                    if (!vertexModelInstance) throw new Error("Vertex model instance not initialized.");
-                    const streamResult = await vertexModelInstance.generateContentStream(vertexRequest);
-                    for await (const item of streamResult.stream) {
-                        const candidate = item.candidates?.[0];
-                        const textPart = candidate?.content?.parts?.[0]?.text;
-                        if (typeof textPart === 'string') accumulatedText += textPart;
-                    }
-                    finalAggregatedResponse = await streamResult.response;
-                     const blockReasonVertex = finalAggregatedResponse?.promptFeedback?.blockReason;
-                     const safetyRatingsVertex = finalAggregatedResponse?.candidates?.[0]?.safetyRatings;
-                     if (blockReasonVertex && blockReasonVertex !== 'BLOCK_REASON_UNSPECIFIED' && blockReasonVertex !== 'OTHER') {
-                          throw new Error(`Vertex Content generation blocked. Reason: ${blockReasonVertex}`);
-                     }
-                     if (!blockReasonVertex && safetyRatingsVertex && safetyRatingsVertex.length > 0) {
-                          console.warn("Vertex: Safety ratings returned despite BLOCK_NONE threshold:", JSON.stringify(safetyRatingsVertex));
-                     }
-                } else { // gemini
-                    if (!geminiModelInstance) throw new Error("Gemini model instance not initialized.");
-                    const streamResult = await geminiModelInstance.generateContentStream({
-                         contents: initialContents as GoogleGeneraiContent[],
-                         generationConfig: geminiGenConfig,
-                         safetySettings: resolvedGeminiSafetySettings,
-                         // tools: adaptedToolsForGemini,
-                     });
+                let lastChunk: any = null;
 
-                    for await (const chunk of streamResult.stream) {
-                        try {
-                            accumulatedText += chunk.text();
-                        } catch (e: any) {
-                             console.warn("Non-text or error chunk encountered in Gemini stream:", e.message);
-                             if (e.message?.toLowerCase().includes('safety')) {
-                                 throw new Error(`Gemini Content generation blocked during stream. Reason: ${e.message}`);
-                             }
-                        }
-                    }
+                for await (const chunk of stream) {
+                    lastChunk = chunk;
                     try {
-                         finalAggregatedResponse = await streamResult.response;
+                        if (chunk.text) accumulatedText += chunk.text;
                     } catch (e: any) {
-                         console.error("Error getting aggregated response from Gemini stream:", e.message);
-                         if (e.message?.toLowerCase().includes('safety')) {
-                            throw new Error(`Gemini Content generation blocked aggregating response. Reason: ${e.message}`);
-                         }
-                         throw e;
-                    }
-                    const blockReasonGemini = finalAggregatedResponse?.promptFeedback?.blockReason;
-                    if (blockReasonGemini) {
-                       throw new Error(`Gemini Content generation blocked. Aggregated Reason: ${blockReasonGemini}`);
-                    }
-                    const finishReasonGemini = finalAggregatedResponse?.candidates?.[0]?.finishReason;
-                    if (finishReasonGemini === 'SAFETY') {
-                       throw new Error(`Gemini Content generation blocked. Aggregated Finish Reason: SAFETY`);
+                        console.warn("Non-text or error chunk encountered in stream:", e.message);
+                        if (e.message?.toLowerCase().includes('safety')) {
+                            throw new Error(`Content generation blocked during stream. Reason: ${e.message}`);
+                        }
                     }
                 }
 
-                 if (!accumulatedText && finalAggregatedResponse) {
-                    try {
-                        if (provider === 'vertex') {
-                             const aggregatedTextVertex = finalAggregatedResponse?.candidates?.[0]?.content?.parts?.[0]?.text;
-                             if (typeof aggregatedTextVertex === 'string') accumulatedText = aggregatedTextVertex;
-                         } else { // gemini
-                            const aggregatedTextGemini = finalAggregatedResponse.text();
-                            if (typeof aggregatedTextGemini === 'string') accumulatedText = aggregatedTextGemini;
-                        }
-                    } catch (e) {
-                        console.warn(`Could not extract text from ${provider} aggregated stream response:`, e);
+                // Check block/safety reasons on lastChunk if available
+                if (lastChunk) {
+                    const blockReason = lastChunk?.promptFeedback?.blockReason;
+                    if (blockReason) {
+                        throw new Error(`Content generation blocked. Aggregated Reason: ${blockReason}`);
                     }
-                 }
+                    const finishReason = lastChunk?.candidates?.[0]?.finishReason;
+                    if (finishReason === 'SAFETY') {
+                        throw new Error(`Content generation blocked. Aggregated Finish Reason: SAFETY`);
+                    }
+                }
 
-                 responseText = accumulatedText;
+                responseText = accumulatedText;
 
-                 if (typeof responseText !== 'string' || !responseText) {
-                     console.error(`Empty response received from ${provider} AI stream. Final Response:`, JSON.stringify(finalAggregatedResponse, null, 2));
-                     throw new Error(`Received empty or non-text response from ${provider} AI stream.`);
-                 }
+                if (typeof responseText !== 'string' || !responseText) {
+                    console.error(`Empty response received from AI stream.`);
+                    throw new Error(`Received empty or non-text response from AI stream.`);
+                }
 
-                 console.error(`[${new Date().toISOString()}] Finished processing stream from ${provider} AI.`);
-
+                console.error(`[${new Date().toISOString()}] Finished processing stream from AI.`);
             } else { // Non-streaming
                 let result: any;
-                if (provider === 'vertex') {
-                     if (!vertexModelInstance) throw new Error("Vertex model instance not initialized.");
-                     result = await vertexModelInstance.generateContent(vertexRequest);
-                     console.error(`[${new Date().toISOString()}] Received non-streaming response from Vertex AI.`);
-                     const candidate = result.response?.candidates?.[0];
-                     responseText = candidate?.content?.parts?.[0]?.text;
-                     const blockReasonVertex = result.response?.promptFeedback?.blockReason;
-                     const safetyRatingsVertex = candidate?.safetyRatings;
-                     if (blockReasonVertex && blockReasonVertex !== 'BLOCK_REASON_UNSPECIFIED' && blockReasonVertex !== 'OTHER') {
-                          throw new Error(`Vertex Content generation blocked. Reason: ${blockReasonVertex}`);
-                     }
-                     if (!blockReasonVertex && safetyRatingsVertex && safetyRatingsVertex.length > 0) {
-                          console.warn("Vertex: Safety ratings returned despite BLOCK_NONE threshold:", JSON.stringify(safetyRatingsVertex));
-                     }
-                } else { // gemini
-                     if (!geminiModelInstance) throw new Error("Gemini model instance not initialized.");
-                     try {
-                         result = await geminiModelInstance.generateContent({
-                             contents: initialContents as GoogleGeneraiContent[],
-                             generationConfig: geminiGenConfig,
-                             safetySettings: resolvedGeminiSafetySettings,
-                             // tools: adaptedToolsForGemini,
-                         });
-                     } catch (e: any) {
-                         console.error("Error during non-streaming Gemini call:", e.message);
-                         if (e.message?.toLowerCase().includes('safety') || e.message?.toLowerCase().includes('prompt blocked') || (e as any).status === 'BLOCKED') {
-                             throw new Error(`Gemini Content generation blocked. Call Reason: ${e.message}`);
-                         }
-                         throw e;
-                     }
-                     console.error(`[${new Date().toISOString()}] Received non-streaming response from Gemini AI.`);
-                     try {
-                         responseText = result.response?.text();
-                     } catch (e) {
-                         console.warn("Could not extract text from Gemini non-streaming response:", e);
-                     }
-                     const blockReasonGemini = result.response?.promptFeedback?.blockReason;
-                     if (blockReasonGemini) {
-                        throw new Error(`Gemini Content generation blocked. Response Reason: ${blockReasonGemini}`);
-                     }
-                     const finishReasonGemini = result.response?.candidates?.[0]?.finishReason;
-                     if (finishReasonGemini === 'SAFETY') {
-                        throw new Error(`Gemini Content generation blocked. Response Finish Reason: SAFETY`);
-                     }
+                try {
+                    result = await ai.models.generateContent({
+                        model: modelId,
+                        contents: initialContents,
+                        ...(tools && tools.length > 0
+                            ? { config: { tools } }
+                            : {})
+                    });
+                } catch (e: any) {
+                    console.error("Error during non-streaming call:", e.message);
+                    if (e.message?.toLowerCase().includes('safety') || e.message?.toLowerCase().includes('prompt blocked') || (e as any).status === 'BLOCKED') {
+                        throw new Error(`Content generation blocked. Call Reason: ${e.message}`);
+                    }
+                    throw e;
+                }
+                console.error(`[${new Date().toISOString()}] Received non-streaming response from AI.`);
+                try {
+                    responseText = result.text;
+                } catch (e) {
+                    console.warn("Could not extract text from non-streaming response:", e);
+                }
+                const blockReason = result?.promptFeedback?.blockReason;
+                if (blockReason) {
+                    throw new Error(`Content generation blocked. Response Reason: ${blockReason}`);
+                }
+                const finishReason = result?.candidates?.[0]?.finishReason;
+                if (finishReason === 'SAFETY') {
+                    throw new Error(`Content generation blocked. Response Finish Reason: SAFETY`);
                 }
 
                 if (typeof responseText !== 'string' || !responseText) {
-                    console.error(`Unexpected non-streaming response structure from ${provider}:`, JSON.stringify(result?.response, null, 2));
-                    throw new Error(`Failed to extract valid text response from ${provider} AI (non-streaming).`);
+                    console.error(`Unexpected non-streaming response structure:`, JSON.stringify(result, null, 2));
+                    throw new Error(`Failed to extract valid text response from AI (non-streaming).`);
                 }
             }
 
