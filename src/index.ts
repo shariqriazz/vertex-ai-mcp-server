@@ -2,10 +2,23 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
-// Load .env file from the current working directory (where npx/node is run)
-// This ensures it works correctly when run via npx outside the project dir
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Get the directory where this script is located (the MCP server directory)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env file from the MCP server directory, not the current working directory
+// This ensures it works correctly when run from other projects
+const envPath = path.resolve(__dirname, '..', '.env');
+dotenv.config({ path: envPath });
+
+// Validate configuration after loading environment variables
+validateConfig();
+
+// Initialize AI client after validation
+initializeAI();
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -23,9 +36,9 @@ import { minimatch } from 'minimatch';
 import { exec } from 'child_process'; // Added for command execution
 import util from 'util'; // Added for promisify
 
-import { getAIConfig } from './config.js';
+import { getAIConfig, validateConfig } from './config.js';
 // Import CombinedContent along with callGenerativeAI
-import { callGenerativeAI, CombinedContent } from './vertex_ai_client.js';
+import { callGenerativeAI, CombinedContent, initializeAI } from './vertex_ai_client.js';
 import { allTools, toolMap } from './tools/index.js';
 import { buildInitialContent, getToolsForApi } from './tools/tool_definition.js';
 

@@ -15,26 +15,29 @@ import { getAIConfig, vertexSafetySettings, geminiSafetySettings as configGemini
 import { sleep } from './utils.js';
 
 // --- Configuration and Client Initialization ---
-const aiConfig = getAIConfig();
-// Use correct client types
 let ai: GoogleGenAI;
+let aiConfig: ReturnType<typeof getAIConfig>;
 
-try {
-    if (aiConfig.geminiApiKey) {
-        ai = new GoogleGenAI({ apiKey: aiConfig.geminiApiKey });
-    } else if (aiConfig.gcpProjectId && aiConfig.gcpLocation) {
-        ai = new GoogleGenAI({
-            vertexai: true,
-            project: aiConfig.gcpProjectId,
-            location: aiConfig.gcpLocation
-        });
-    } else {
-        throw new Error("Missing Gemini API key or Vertex AI project/location configuration.");
+export function initializeAI() {
+    aiConfig = getAIConfig();
+    
+    try {
+        if (aiConfig.geminiApiKey) {
+            ai = new GoogleGenAI({ apiKey: aiConfig.geminiApiKey });
+        } else if (aiConfig.gcpProjectId && aiConfig.gcpLocation) {
+            ai = new GoogleGenAI({
+                vertexai: true,
+                project: aiConfig.gcpProjectId,
+                location: aiConfig.gcpLocation
+            });
+        } else {
+            throw new Error("Missing Gemini API key or Vertex AI project/location configuration.");
+        }
+        console.log("Initialized GoogleGenAI with config:", aiConfig.modelId);
+    } catch (error: any) {
+        console.error(`Error initializing GoogleGenAI:`, error.message);
+        process.exit(1);
     }
-    console.log("Initialized GoogleGenAI with config:", aiConfig.modelId);
-} catch (error: any) {
-    console.error(`Error initializing GoogleGenAI:`, error.message);
-    process.exit(1);
 }
 
 // Define a union type for Content
@@ -45,6 +48,10 @@ export async function callGenerativeAI(
     initialContents: CombinedContent[],
     tools: Tool[] | undefined
 ): Promise<string> {
+    // Ensure AI is initialized
+    if (!ai || !aiConfig) {
+        throw new Error("AI client not initialized. Call initializeAI() first.");
+    }
 
     const {
         provider,

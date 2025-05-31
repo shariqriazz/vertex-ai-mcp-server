@@ -2,7 +2,10 @@ import { HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 // --- Provider Configuration ---
 export type AIProvider = "vertex" | "gemini";
-export const AI_PROVIDER = (process.env.AI_PROVIDER?.toLowerCase() === "gemini" ? "gemini" : "vertex") as AIProvider;
+
+function getAIProvider(): AIProvider {
+    return (process.env.AI_PROVIDER?.toLowerCase() === "gemini" ? "gemini" : "vertex") as AIProvider;
+}
 
 // --- Vertex AI Specific ---
 export const GCLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT;
@@ -39,15 +42,19 @@ export const geminiSafetySettings = [
     { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
-// --- Validation ---
-if (AI_PROVIDER === "vertex" && !GCLOUD_PROJECT) {
-  console.error("Error: AI_PROVIDER is 'vertex' but GOOGLE_CLOUD_PROJECT environment variable is not set.");
-  process.exit(1);
-}
+// --- Validation Function ---
+export function validateConfig() {
+  const aiProvider = getAIProvider();
+  
+  if (aiProvider === "vertex" && !process.env.GOOGLE_CLOUD_PROJECT) {
+    console.error("Error: AI_PROVIDER is 'vertex' but GOOGLE_CLOUD_PROJECT environment variable is not set.");
+    process.exit(1);
+  }
 
-if (AI_PROVIDER === "gemini" && !GEMINI_API_KEY) {
-  console.error("Error: AI_PROVIDER is 'gemini' but GEMINI_API_KEY environment variable is not set.");
-  process.exit(1);
+  if (aiProvider === "gemini" && !process.env.GEMINI_API_KEY) {
+    console.error("Error: AI_PROVIDER is 'gemini' but GEMINI_API_KEY environment variable is not set.");
+    process.exit(1);
+  }
 }
 
 // --- Shared Config Retrieval ---
@@ -92,15 +99,16 @@ export function getAIConfig() {
     }
 
     // Provider-specific model ID
+    const aiProvider = getAIProvider();
     let modelId: string;
-    if (AI_PROVIDER === 'vertex') {
+    if (aiProvider === 'vertex') {
         modelId = process.env.VERTEX_MODEL_ID || DEFAULT_VERTEX_MODEL_ID;
     } else { // gemini
         modelId = process.env.GEMINI_MODEL_ID || DEFAULT_GEMINI_MODEL_ID;
     }
 
      return {
-        provider: AI_PROVIDER,
+        provider: aiProvider,
         modelId,
         temperature,
         useStreaming,
@@ -108,8 +116,8 @@ export function getAIConfig() {
         maxRetries,
         retryDelayMs,
         // Provider-specific connection info
-        gcpProjectId: GCLOUD_PROJECT,
-        gcpLocation: GCLOUD_LOCATION,
-        geminiApiKey: GEMINI_API_KEY
+        gcpProjectId: process.env.GOOGLE_CLOUD_PROJECT,
+        gcpLocation: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+        geminiApiKey: process.env.GEMINI_API_KEY
      };
 }
