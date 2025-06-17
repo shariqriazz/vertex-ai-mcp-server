@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/shariqriazz-vertex-ai-mcp-server-badge.png)](https://mseep.ai/app/shariqriazz-vertex-ai-mcp-server)
+
 # Vertex AI MCP Server
 [![smithery badge](https://smithery.ai/badge/@shariqriazz/vertex-ai-mcp-server)](https://smithery.ai/server/@shariqriazz/vertex-ai-mcp-server)
 
