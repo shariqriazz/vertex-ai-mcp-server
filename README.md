@@ -60,6 +60,38 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 
 *(Note: Input/output schemas for each tool are defined in their respective files within `src/tools/` and exposed via the MCP server.)*
 
+### Discovery Engine Search
+
+*   `search_confluence`: Search Helix Confluence documentation using Discovery Engine. Returns relevant pages, snippets, and key information from internal documentation. **Supports OAuth user authentication** for personalized, permission-aware results.
+
+The server supports searching across multiple Discovery Engine datastores including:
+- **Cloud Sources**: Confluence, Jira, Slack, GitHub
+- **Google Workspace**: Drive, Gmail, Calendar, Contacts, Groups
+- **Third-party**: OneDrive, HubSpot, PagerDuty, CircleCI, Medialab
+
+#### Authentication Options
+
+**Service Account (Default)**: Returns all indexed content
+```typescript
+search_confluence(query="support chatbot", max_results=5)
+```
+
+**OAuth User Authentication**: Returns only content the user has permission to access
+```typescript
+search_confluence(query="support chatbot", max_results=5, use_user_auth=true)
+```
+
+When `use_user_auth=true` and `USE_OAUTH=true` is configured, searches respect user permissions from source systems (Confluence, Jira, etc.), providing secure, personalized results.
+
+#### Documentation
+
+- [Discovery Engine Datastores Guide](./DISCOVERY_ENGINE_DATASTORES.md) - Comprehensive implementation guide
+- [OAuth Setup Guide](./docs/OAUTH_SETUP.md) - **Complete OAuth configuration and troubleshooting**
+- [Datastore Quick Reference](./docs/DATASTORE_QUICK_REFERENCE.md) - Common field mappings and search examples
+- [Datastore Template](./docs/datastore-template.ts) - Template for adding new datastore search tools
+
+**Important**: Discovery Engine gRPC connections require Netskope bypass rules for both the `node` process and `discoveryengine.googleapis.com` domain. See the datastores guide for SSL troubleshooting steps.
+
 ## Prerequisites
 
 *   Node.js (v18+)

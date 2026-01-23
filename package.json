@@ -25,6 +25,7 @@
     "inspector": "npx @modelcontextprotocol/inspector build/index.js"
   },
   "dependencies": {
+    "@google-cloud/discoveryengine": "^2.5.2",
     "@google/genai": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "diff": "^7.0.0",

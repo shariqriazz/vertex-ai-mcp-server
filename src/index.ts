@@ -47,6 +47,7 @@ import { SaveTopicExplanationArgsSchema } from './tools/save_topic_explanation.j
 import { SaveAnswerQueryDirectArgsSchema } from './tools/save_answer_query_direct.js';
 import { SaveAnswerQueryWebsearchArgsSchema } from './tools/save_answer_query_websearch.js';
 import { ExecuteTerminalCommandArgsSchema } from './tools/execute_terminal_command.js'; // Renamed
+import { SearchConfluenceSchema, searchConfluence } from './tools/search_confluence_standalone.js';
 
 
 // --- Filesystem Helper Functions (Adapted from example.ts) ---
@@ -260,13 +261,17 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   // Use new config function
   const config = getAIConfig();
+
+  // Get base tools
+  const baseTools = allTools.map(t => ({
+      name: t.name,
+      // Inject model ID dynamically from new config structure
+      description: t.description.replace("${modelId}", config.modelId),
+      inputSchema: t.inputSchema
+  }));
+
   return {
-      tools: allTools.map(t => ({
-          name: t.name,
-          // Inject model ID dynamically from new config structure
-          description: t.description.replace("${modelId}", config.modelId),
-          inputSchema: t.inputSchema
-      }))
+      tools: baseTools
   };
 });
 
@@ -288,11 +293,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Use new config function
         const config = getAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, customDatastoreId, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
         // Use new AI function call and type cast
         const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
-        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
+        // Use custom datastore ID if provided, otherwise fall back to WORKSPACE_DATASTORE_ID
+        const datastoreId = customDatastoreId || WORKSPACE_DATASTORE_ID;
+        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, datastoreId);
 
         const generatedContent = await callGenerativeAI(
             initialContents,
@@ -555,15 +562,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
              // if (controller) { controller.abort(); } // Example if manual cleanup were needed
         }
 
+    } else if (toolName === "search_confluence") {
+      // --- Search Confluence via Discovery Engine ---
+      const parsed = SearchConfluenceSchema.parse(args);
+      const result = await searchConfluence(parsed);
+      return result;
+
     } else {
       // --- Generic AI Tool Logic (Non-filesystem, non-combined) ---
       const config = getAIConfig(); // Use renamed config function
       if (!toolDefinition.buildPrompt) {
         throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} is missing required buildPrompt logic.`);
       }
-      const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+      const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, customDatastoreId, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
       const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[]; // Cast
-      const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
+      // Use custom datastore ID if provided, otherwise fall back to WORKSPACE_DATASTORE_ID
+      const datastoreId = customDatastoreId || WORKSPACE_DATASTORE_ID;
+      const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, datastoreId);
 
       // Call the unified AI function
       const responseText = await callGenerativeAI(

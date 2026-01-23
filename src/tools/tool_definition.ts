@@ -10,6 +10,7 @@ export interface ToolDefinition {
         userQueryText: string;
         useWebSearch: boolean;
         useWorkspaceSearch?: boolean;
+        customDatastoreId?: string;
         enableFunctionCalling: boolean;
     };
 }
