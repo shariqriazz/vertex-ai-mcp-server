@@ -11,8 +11,8 @@ export const searchConfluenceTool: ToolDefinition = {
     description:
         "Search Helix Confluence documentation using Discovery Engine. " +
         "Returns relevant pages, snippets, and key information from internal documentation. " +
-        "Supports both service account (default) and OAuth user authentication for personalized results. " +
-        "When use_user_auth=true and OAuth is enabled, only returns content the authenticated user has permission to access.",
+        "Requires OAuth authentication to ensure users only see content they have permission to access. " +
+        "On first use, will prompt for Google authentication in the browser.",
     inputSchema: SearchConfluenceJsonSchema as any,
 
     // This tool doesn't use the LLM, so buildPrompt is minimal
