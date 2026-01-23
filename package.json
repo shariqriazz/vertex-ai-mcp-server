@@ -9,26 +9,33 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shariqriazz/vertex-ai-mcp-server.git"
+    "url": "git+https://github.com/myhelix/vertex-ai-mcp-server.git"
   },
-  "homepage": "https://github.com/shariqriazz/vertex-ai-mcp-server#readme",
+  "homepage": "https://github.com/myhelix/vertex-ai-mcp-server#readme",
   "bugs": {
-    "url": "https://github.com/shariqriazz/vertex-ai-mcp-server/issues"
+    "url": "https://github.com/myhelix/vertex-ai-mcp-server/issues"
   },
   "files": [
     "build"
   ],
   "scripts": {
-    "build": "bun run tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
-    "prepare": "bun run build",
-    "watch": "bun run tsc --watch",
-    "inspector": "bunx @modelcontextprotocol/inspector build/index.js"
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@google-cloud/discoveryengine": "^2.5.2",
     "@google/genai": "^1.0.1",
-    "@modelcontextprotocol/sdk": "0.6.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "diff": "^7.0.0",
     "dotenv": "^16.5.0",
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^170.1.0",
+    "keytar": "^7.9.0",
     "minimatch": "^10.0.1",
     "zod": "^3.24.3",
     "zod-to-json-schema": "^3.24.5"
@@ -36,7 +43,8 @@
   "devDependencies": {
     "@types/diff": "^7.0.2",
     "@types/minimatch": "^5.1.2",
-    "@types/node": "^20.11.24",
-    "typescript": "^5.3.3"
+    "@types/node": "^20.19.30",
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   }
 }

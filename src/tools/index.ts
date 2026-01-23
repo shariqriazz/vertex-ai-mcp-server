@@ -1,5 +1,7 @@
 import { ToolDefinition } from "./tool_definition.js";
 import { answerQueryWebsearchTool } from "./answer_query_websearch.js";
+import { answerQueryWorkspaceTool } from "./answer_query_workspace.js";
+import { answerQueryDatastoreTool } from "./answer_query_datastore.js";
 import { answerQueryDirectTool } from "./answer_query_direct.js";
 import { explainTopicWithDocsTool } from "./explain_topic_with_docs.js";
 import { getDocSnippetsTool } from "./get_doc_snippets.js";
@@ -35,11 +37,14 @@ import { testingStrategyGeneratorTool } from "./testing_strategy_generator.js";
 import { regulatoryComplianceAdvisorTool } from "./regulatory_compliance_advisor.js";
 import { microserviceDesignAssistantTool } from "./microservice_design_assistant.js";
 import { documentationGeneratorTool } from "./documentation_generator.js";
+import { searchConfluenceTool } from "./search_confluence.js";
 
 
 export const allTools: ToolDefinition[] = [
     // Query & Generation Tools
     answerQueryWebsearchTool,
+    answerQueryWorkspaceTool,
+    answerQueryDatastoreTool,
     answerQueryDirectTool,
     explainTopicWithDocsTool,
     getDocSnippetsTool,
@@ -75,6 +80,7 @@ export const allTools: ToolDefinition[] = [
     regulatoryComplianceAdvisorTool,
     microserviceDesignAssistantTool,
     documentationGeneratorTool,
+    searchConfluenceTool,
 ];
 
 // Create a map for easy lookup

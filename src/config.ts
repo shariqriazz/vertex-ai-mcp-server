@@ -11,6 +11,20 @@ export const GCLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "us-central1
 // --- Gemini API Specific ---
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+// --- OAuth Configuration ---
+export const USE_OAUTH = process.env.USE_OAUTH?.toLowerCase() === "true";
+export const WORKSPACE_DATASTORE_ID = process.env.WORKSPACE_DATASTORE_ID;
+
+// OAuth scopes needed for Vertex AI with workspace grounding
+export const VERTEX_AI_OAUTH_SCOPES = [
+    'https://www.googleapis.com/auth/cloud-platform',  // For Vertex AI API access
+    'https://www.googleapis.com/auth/drive.readonly',  // For workspace grounding with Drive
+    'https://www.googleapis.com/auth/documents.readonly',  // For workspace grounding with Docs
+    'https://www.googleapis.com/auth/spreadsheets.readonly',  // For workspace grounding with Sheets
+    'https://www.googleapis.com/auth/presentations.readonly',  // For workspace grounding with Slides
+    'https://www.googleapis.com/auth/gmail.readonly',  // For workspace grounding with Gmail
+];
+
 // --- Common AI Configuration Defaults ---
 const DEFAULT_VERTEX_MODEL_ID = "gemini-2.5-pro-exp-03-25";
 const DEFAULT_GEMINI_MODEL_ID = "gemini-2.5-pro-exp-03-25";

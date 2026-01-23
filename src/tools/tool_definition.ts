@@ -9,6 +9,8 @@ export interface ToolDefinition {
         systemInstructionText: string;
         userQueryText: string;
         useWebSearch: boolean;
+        useWorkspaceSearch?: boolean;
+        customDatastoreId?: string;
         enableFunctionCalling: boolean;
     };
 }
@@ -21,7 +23,36 @@ export function buildInitialContent(systemInstruction: string, userQuery: string
 }
 
 // Helper to determine tools for API call
-export function getToolsForApi(enableFunctionCalling: boolean, useWebSearch: boolean): Tool[] | undefined {
-     // Function calling is no longer supported by the remaining tools
-     return useWebSearch ? [{ googleSearch: {} } as any] : undefined; // Cast needed as SDK type might not include googleSearch directly
+export function getToolsForApi(
+    enableFunctionCalling: boolean,
+    useWebSearch: boolean,
+    useWorkspaceSearch: boolean = false,
+    workspaceDatastoreId?: string
+): Tool[] | undefined {
+     const tools: Tool[] = [];
+
+     if (useWebSearch) {
+         tools.push({ googleSearch: {} } as any);
+     }
+
+     if (useWorkspaceSearch) {
+         if (!workspaceDatastoreId) {
+             // This is a configuration error that should be caught earlier,
+             // but we validate here as a safety net.
+             throw new McpError(
+                 ErrorCode.InvalidRequest,
+                 "Workspace search requested but WORKSPACE_DATASTORE_ID is not configured. " +
+                 "Set WORKSPACE_DATASTORE_ID in your environment configuration."
+             );
+         }
+         tools.push({
+             retrieval: {
+                 vertexAiSearch: {
+                     datastore: workspaceDatastoreId
+                 }
+             }
+         } as any);
+     }
+
+     return tools.length > 0 ? tools : undefined;
 }
