@@ -34,7 +34,16 @@ export function getToolsForApi(
          tools.push({ googleSearch: {} } as any);
      }
 
-     if (useWorkspaceSearch && workspaceDatastoreId) {
+     if (useWorkspaceSearch) {
+         if (!workspaceDatastoreId) {
+             // This is a configuration error that should be caught earlier,
+             // but we validate here as a safety net.
+             throw new McpError(
+                 ErrorCode.InvalidRequest,
+                 "Workspace search requested but WORKSPACE_DATASTORE_ID is not configured. " +
+                 "Set WORKSPACE_DATASTORE_ID in your environment configuration."
+             );
+         }
          tools.push({
              retrieval: {
                  vertexAiSearch: {

@@ -23,6 +23,7 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 ### Query & Generation (AI Focused)
 *   `answer_query_websearch`: Answers a natural language query using the configured Vertex AI model enhanced with Google Search results.
 *   `answer_query_direct`: Answers a natural language query using only the internal knowledge of the configured Vertex AI model.
+*   `answer_query_workspace`: Answers a natural language query using the configured Vertex AI model enhanced with Google Workspace grounding (Drive, Docs, Sheets, Slides, Gmail). Requires OAuth authentication.
 *   `explain_topic_with_docs`: Provides a detailed explanation for a query about a specific software topic by synthesizing information primarily from official documentation found via web search.
 *   `get_doc_snippets`: Provides precise, authoritative code snippets or concise answers for technical queries by searching official documentation.
 *   `generate_project_guidelines`: Generates a structured project guidelines document (Markdown) based on a specified list of technologies (optionally with versions), using web search for best practices.
@@ -62,10 +63,27 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 ## Prerequisites
 
 *   Node.js (v18+)
-*   Bun (`npm install -g bun`)
 *   Google Cloud Project with Billing enabled.
 *   Vertex AI API enabled in the GCP project.
 *   Google Cloud Authentication configured in your environment (Application Default Credentials via `gcloud auth application-default login` is recommended, or a Service Account Key).
+
+### Platform-Specific Requirements for OAuth (Optional)
+
+If using OAuth authentication for Workspace grounding (`USE_OAUTH=true`), the `keytar` package is used for secure token storage:
+
+*   **macOS**: Keytar uses the macOS Keychain - no additional setup required.
+*   **Linux**: Requires `libsecret` library:
+    ```bash
+    # Debian/Ubuntu
+    sudo apt-get install libsecret-1-dev
+    # RHEL/Fedora
+    sudo dnf install libsecret-devel
+    # Arch Linux
+    sudo pacman -S libsecret
+    ```
+*   **Windows**: Keytar uses the Windows Credential Manager - no additional setup required.
+
+**Note**: If `keytar` fails to load, the server falls back to encrypted file-based token storage in `~/.config/vertex-ai-mcp/` (or `%APPDATA%/vertex-ai-mcp/` on Windows).
 
 ## Setup & Installation
 

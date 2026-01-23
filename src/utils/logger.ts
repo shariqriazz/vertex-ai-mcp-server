@@ -22,7 +22,14 @@ async function ensureLogDirectoryExists() {
 // Ensure the directory exists when the module is loaded.
 ensureLogDirectoryExists();
 
-let isLoggingEnabled = false;
+// Check if DEBUG_LOGGING environment variable is set to enable logging
+const debugLoggingEnv = process.env.DEBUG_LOGGING;
+const debugLoggingDefault =
+    typeof debugLoggingEnv === 'string'
+        ? debugLoggingEnv.toLowerCase() === 'true' || debugLoggingEnv === '1'
+        : false;
+
+let isLoggingEnabled = debugLoggingDefault;
 
 export function setLoggingEnabled(enabled: boolean) {
     isLoggingEnabled = enabled;

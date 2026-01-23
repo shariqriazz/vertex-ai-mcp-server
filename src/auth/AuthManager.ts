@@ -14,9 +14,16 @@ import open from '../utils/open-wrapper.js';
 import { shouldLaunchBrowser } from '../utils/secure-browser-launcher.js';
 import { OAuthCredentialStorage } from './token-storage/oauth-credential-storage.js';
 
-// The Client ID for the OAuth flow.
-// The secret is handled by the cloud function, not in the client.
-const CLIENT_ID = '338689075775-o75k922vn5fdl18qergr96rp8g63e4d7.apps.googleusercontent.com';
+// This is an OAuth *public* client ID and is not a secret. The corresponding
+// client secret is handled by the cloud function on the server side, and is
+// never stored in or exposed by this client.
+//
+// For flexibility across environments or organizations, the client ID can be
+// overridden via the OAUTH_CLIENT_ID environment variable. If it is not set,
+// we fall back to the default public client ID below.
+const CLIENT_ID =
+  process.env.OAUTH_CLIENT_ID ??
+  '338689075775-o75k922vn5fdl18qergr96rp8g63e4d7.apps.googleusercontent.com';
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -160,17 +167,23 @@ export class AuthManager {
 
         // Add timeout to prevent infinite waiting when browser tab gets stuck
         const authTimeout = 5 * 60 * 1000; // 5 minutes timeout
+        let authTimeoutId: NodeJS.Timeout;
         const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-            reject(
-            new Error(
-                'Authentication timed out after 5 minutes. The browser tab may have gotten stuck in a loading state. ' +
-                'Please try again.',
-            ),
-            );
-        }, authTimeout);
+            authTimeoutId = setTimeout(() => {
+                reject(
+                    new Error(
+                        'Authentication timed out after 5 minutes. The browser tab may have gotten stuck in a loading state. ' +
+                        'Please try again.',
+                    ),
+                );
+            }, authTimeout);
         });
-        await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
+        try {
+            await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
+        } finally {
+            // Clean up the timeout to prevent dangling timers
+            clearTimeout(authTimeoutId!);
+        }
 
         await OAuthCredentialStorage.saveCredentials(oAuth2Client.credentials);
         this.client = oAuth2Client;
@@ -187,8 +200,11 @@ export class AuthManager {
     public async refreshToken(): Promise<void> {
         logToFile('Manual token refresh triggered');
         if (!this.client) {
-            logToFile('No client available to refresh, getting new client');
-            this.client = await this.getAuthenticatedClient();
+            // Guard against infinite recursion: getAuthenticatedClient() can call refreshToken(),
+            // which would call getAuthenticatedClient() again if this.client is null.
+            // Instead, throw an error requiring re-authentication.
+            logToFile('No client available to refresh; cannot refresh tokens without an authenticated client');
+            throw new Error('Cannot refresh tokens: no authenticated client is available. Please re-authenticate.');
         }
         try {
             const currentCredentials = { ...this.client.credentials };
@@ -315,6 +331,9 @@ export class AuthManager {
                         .searchParams;
 
                     // SECURITY: Validate the state parameter to prevent CSRF attacks.
+                    // The cloud function receives the base64-encoded JSON state from Google,
+                    // decodes it, extracts the 'csrf' field, and passes it to this callback
+                    // via the 'state' query parameter. We compare it to our original csrfToken.
                     const returnedState = qs.get('state');
                     if (returnedState !== csrfToken) {
                         res.end('State mismatch. Possible CSRF attack.');

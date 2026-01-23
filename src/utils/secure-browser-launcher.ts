@@ -77,7 +77,9 @@ export async function openBrowserSecurely(
 
     case 'win32':
       // Windows - use PowerShell with Start-Process
-      // This avoids the cmd.exe shell which is vulnerable to injection
+      // Using Start-Process as a separate command with the URL as FilePath argument
+      // This is safer than constructing a command string with string interpolation.
+      // The URL has already been validated to be HTTP/HTTPS only.
       command = 'powershell.exe';
       args = [
         '-NoProfile',
@@ -85,7 +87,9 @@ export async function openBrowserSecurely(
         '-WindowStyle',
         'Hidden',
         '-Command',
-        `Start-Process '${url.replace(/'/g, "''")}'`,
+        'Start-Process',
+        '-FilePath',
+        url,
       ];
       break;
 

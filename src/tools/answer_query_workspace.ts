@@ -1,5 +1,6 @@
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { ToolDefinition, modelIdPlaceholder } from "./tool_definition.js";
+import { USE_OAUTH, WORKSPACE_DATASTORE_ID } from "../config.js";
 
 export const answerQueryWorkspaceTool: ToolDefinition = {
     name: "answer_query_workspace",
@@ -15,6 +16,21 @@ export const answerQueryWorkspaceTool: ToolDefinition = {
         required: ["query"]
     },
     buildPrompt: (args: any, modelId: string) => {
+        // Validate prerequisites for workspace grounding
+        if (!USE_OAUTH) {
+            throw new McpError(
+                ErrorCode.InvalidRequest,
+                "Workspace grounding requires OAuth authentication. Set USE_OAUTH=true in your environment configuration."
+            );
+        }
+        if (!WORKSPACE_DATASTORE_ID) {
+            throw new McpError(
+                ErrorCode.InvalidRequest,
+                "Workspace grounding requires a datastore ID. Set WORKSPACE_DATASTORE_ID in your environment configuration. " +
+                "Format: projects/{project}/locations/{location}/collections/{collection}/dataStores/{dataStore}"
+            );
+        }
+
         const query = args.query;
         if (typeof query !== "string" || !query) {
             throw new McpError(ErrorCode.InvalidParams, "Missing 'query'.");
