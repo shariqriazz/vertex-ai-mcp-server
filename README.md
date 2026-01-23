@@ -62,26 +62,27 @@ This project implements a Model Context Protocol (MCP) server that provides a co
 
 ### Discovery Engine Search
 
-*   `search_confluence`: Search Helix Confluence documentation using Discovery Engine. Returns relevant pages, snippets, and key information from internal documentation. **Supports OAuth user authentication** for personalized, permission-aware results.
+*   `search_confluence`: Search Helix Confluence documentation using Discovery Engine. Returns relevant pages, snippets, and key information from internal documentation. Uses OAuth authentication to ensure users only see content they have permission to access.
+*   `search_drive`: Search Google Drive files using Discovery Engine. Returns relevant documents, spreadsheets, presentations, and other files with snippets and key information. Uses OAuth authentication to ensure users only see their own accessible files.
 
 The server supports searching across multiple Discovery Engine datastores including:
 - **Cloud Sources**: Confluence, Jira, Slack, GitHub
 - **Google Workspace**: Drive, Gmail, Calendar, Contacts, Groups
 - **Third-party**: OneDrive, HubSpot, PagerDuty, CircleCI, Medialab
 
-#### Authentication Options
+#### Authentication
 
-**Service Account (Default)**: Returns all indexed content
+These tools use **OAuth authentication** to ensure users only see content they have permission to access. On first use, you'll be prompted to authenticate via browser.
+
 ```typescript
+// Search Confluence - respects user permissions
 search_confluence(query="support chatbot", max_results=5)
+
+// Search Google Drive - respects user permissions
+search_drive(query="project docs", max_results=5)
 ```
 
-**OAuth User Authentication**: Returns only content the user has permission to access
-```typescript
-search_confluence(query="support chatbot", max_results=5, use_user_auth=true)
-```
-
-When `use_user_auth=true` and `USE_OAUTH=true` is configured, searches respect user permissions from source systems (Confluence, Jira, etc.), providing secure, personalized results.
+OAuth tokens are stored securely and refreshed automatically. The OAuth flow uses a cloud function to handle token exchange securely (client_secret is never distributed).
 
 #### Documentation
 
