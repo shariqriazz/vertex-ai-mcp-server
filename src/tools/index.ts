@@ -38,6 +38,7 @@ import { regulatoryComplianceAdvisorTool } from "./regulatory_compliance_advisor
 import { microserviceDesignAssistantTool } from "./microservice_design_assistant.js";
 import { documentationGeneratorTool } from "./documentation_generator.js";
 import { searchConfluenceTool } from "./search_confluence.js";
+import { searchDriveTool } from "./search_drive.js";
 
 
 export const allTools: ToolDefinition[] = [
@@ -81,6 +82,7 @@ export const allTools: ToolDefinition[] = [
     microserviceDesignAssistantTool,
     documentationGeneratorTool,
     searchConfluenceTool,
+    searchDriveTool,
 ];
 
 // Create a map for easy lookup

@@ -1,0 +1,17 @@
+{
+  "name": "vertex-ai-mcp-oauth",
+  "version": "1.0.0",
+  "description": "OAuth cloud function for Vertex AI MCP Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "functions-framework --target=oauthHandler"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "@google-cloud/secret-manager": "^5.6.0",
+    "axios": "^1.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

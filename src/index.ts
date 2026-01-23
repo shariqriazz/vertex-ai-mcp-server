@@ -48,6 +48,7 @@ import { SaveAnswerQueryDirectArgsSchema } from './tools/save_answer_query_direc
 import { SaveAnswerQueryWebsearchArgsSchema } from './tools/save_answer_query_websearch.js';
 import { ExecuteTerminalCommandArgsSchema } from './tools/execute_terminal_command.js'; // Renamed
 import { SearchConfluenceSchema, searchConfluence } from './tools/search_confluence_standalone.js';
+import { SearchDriveSchema, searchDrive } from './tools/search_drive_standalone.js';
 
 
 // --- Filesystem Helper Functions (Adapted from example.ts) ---
@@ -566,6 +567,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // --- Search Confluence via Discovery Engine ---
       const parsed = SearchConfluenceSchema.parse(args);
       const result = await searchConfluence(parsed);
+      return result;
+
+    } else if (toolName === "search_drive") {
+      // --- Search Google Drive via Discovery Engine ---
+      const parsed = SearchDriveSchema.parse(args);
+      const result = await searchDrive(parsed);
       return result;
 
     } else {

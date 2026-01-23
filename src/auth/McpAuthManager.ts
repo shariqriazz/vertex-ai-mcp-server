@@ -1,24 +1,28 @@
 /**
  * OAuth2 Authentication Manager for the MCP Server.
  *
- * This is a standalone auth manager that uses the MCP server's own OAuth client
- * credentials, separate from the Gemini CLI auth infrastructure.
+ * This auth manager uses a cloud function to handle OAuth token exchange.
+ * The client_secret is stored securely in the cloud function (via Secret Manager)
+ * and is never distributed to clients.
  *
- * SECURITY NOTE: This uses PKCE (Proof Key for Code Exchange) for security.
- * Per Google's documentation, desktop/installed applications "cannot keep secrets",
- * so we use PKCE instead of relying on client_secret for security.
- * The client_id is embedded in the code (it's not a secret - it's a public identifier).
+ * Flow:
+ * 1. Client generates auth URL pointing to Google OAuth with cloud function as redirect_uri
+ * 2. User authenticates with Google
+ * 3. Google redirects to cloud function with auth code
+ * 4. Cloud function exchanges code for tokens (using secret from Secret Manager)
+ * 5. Cloud function redirects to local callback with tokens
+ * 6. Local callback receives tokens and stores them
+ *
  * See: https://developers.google.com/identity/protocols/oauth2/native-app
  */
 
-import { OAuth2Client, Credentials, CodeChallengeMethod } from 'google-auth-library';
+import { OAuth2Client, Credentials } from 'google-auth-library';
 import crypto from 'node:crypto';
 import * as http from 'node:http';
 import * as net from 'node:net';
 import * as url from 'node:url';
 import { logToFile } from '../utils/logger.js';
 import open from '../utils/open-wrapper.js';
-import { generateCodeVerifier, generateCodeChallenge } from '../utils/pkce.js';
 import {
     loadTokens,
     saveTokens,
@@ -27,11 +31,15 @@ import {
     isTokenExpiringSoon
 } from '../utils/token-storage.js';
 
-// OAuth Client ID for the Helix Vertex AI MCP Server
-// This is a PUBLIC identifier, not a secret. It's safe to embed in code.
-// The OAuth app is configured as "Internal" in GCP, so only Helix org users can authenticate.
-// Security is provided by PKCE, not by keeping the client_id secret.
-const DEFAULT_CLIENT_ID = '403334419176-95dvevmlhs9v6lnhbq98e790fevd6hl3.apps.googleusercontent.com';
+// OAuth Client ID - This is a PUBLIC identifier, safe to distribute
+// The client_secret is stored in the cloud function, never in the client
+const DEFAULT_CLIENT_ID = '403334419176-opdsmqonf07ricj90ug3to6gtk9fc54j.apps.googleusercontent.com';
+
+// Cloud function URL for OAuth token exchange
+// This cloud function holds the client_secret securely
+const DEFAULT_CLOUD_FUNCTION_URL = 'https://us-central1-agentspace-457313.cloudfunctions.net/vertex-ai-mcp-oauth';
+
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * OAuth login result containing the auth URL and completion promise.
@@ -45,14 +53,16 @@ export class McpAuthManager {
     private client: OAuth2Client | null = null;
     private scopes: string[];
     private clientId: string;
-    private codeVerifier: string | null = null;
+    private cloudFunctionUrl: string;
 
     constructor(scopes: string[]) {
         this.scopes = scopes;
 
-        // Use embedded client ID by default, allow override via environment variable
-        // The client_id is a public identifier, not a secret
+        // Client ID can be overridden via environment variable
         this.clientId = process.env.MCP_OAUTH_CLIENT_ID || DEFAULT_CLIENT_ID;
+
+        // Cloud function URL can be overridden for testing/different deployments
+        this.cloudFunctionUrl = process.env.MCP_OAUTH_CLOUD_FUNCTION_URL || DEFAULT_CLOUD_FUNCTION_URL;
     }
 
     private async loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
@@ -110,30 +120,9 @@ export class McpAuthManager {
             }
         }
 
-        // Create new OAuth2Client with just the client ID (no secret needed for desktop apps)
-        // Security is provided by PKCE, not by client_secret
+        // Create OAuth2Client with only client ID (no secret - it's in the cloud function)
         const oAuth2Client = new OAuth2Client({
             clientId: this.clientId,
-        });
-
-        // Set up token refresh handler
-        oAuth2Client.on('tokens', async (tokens) => {
-            logToFile('Tokens refreshed event received');
-            if (tokens.refresh_token) {
-                logToFile('New refresh token received in event');
-            }
-
-            try {
-                const current = loadTokens() || {};
-                const merged = {
-                    ...tokens,
-                    refresh_token: tokens.refresh_token || current.refresh_token
-                };
-                saveTokens(merged);
-                logToFile('Credentials saved after refresh');
-            } catch (e) {
-                logToFile(`Error saving refreshed credentials: ${e}`);
-            }
         });
 
         logToFile('No valid cached client, checking for saved credentials...');
@@ -195,25 +184,52 @@ export class McpAuthManager {
         logToFile('Authentication cleared.');
     }
 
+    /**
+     * Refresh the access token using the cloud function.
+     * The cloud function has the client_secret needed for token refresh.
+     */
     public async refreshToken(): Promise<void> {
         logToFile('Manual token refresh triggered');
         if (!this.client) {
             throw new Error('Cannot refresh tokens: no authenticated client is available.');
         }
 
-        try {
-            const { credentials } = await this.client.refreshAccessToken();
+        const currentCredentials = this.client.credentials;
+        if (!currentCredentials.refresh_token) {
+            throw new Error('No refresh token available');
+        }
 
-            // Preserve refresh token
-            const currentCredentials = this.client.credentials;
-            const mergedCredentials = {
-                ...credentials,
-                refresh_token: credentials.refresh_token || currentCredentials.refresh_token
+        try {
+            logToFile('Calling cloud function to refresh token...');
+
+            // Call the cloud function refresh endpoint
+            const response = await fetch(`${this.cloudFunctionUrl}/refreshToken`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    refresh_token: currentCredentials.refresh_token
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Token refresh failed: ${response.status} ${errorText}`);
+            }
+
+            const newTokens = await response.json();
+
+            // Merge new tokens with existing credentials, preserving refresh_token
+            // Note: Google does NOT return a new refresh_token on refresh
+            const mergedCredentials: Credentials = {
+                ...newTokens,
+                refresh_token: currentCredentials.refresh_token // Always preserve original
             };
 
             this.client.setCredentials(mergedCredentials);
             saveTokens(mergedCredentials);
-            logToFile('Token refreshed and saved successfully');
+            logToFile('Token refreshed and saved successfully via cloud function');
         } catch (error) {
             logToFile(`Error during token refresh: ${error}`);
             throw error;
@@ -234,30 +250,44 @@ export class McpAuthManager {
         });
     }
 
+    /**
+     * Start the OAuth flow using the cloud function pattern.
+     *
+     * The flow:
+     * 1. Generate local callback URL
+     * 2. Create state payload with local callback URL and CSRF token
+     * 3. Redirect user to Google OAuth with cloud function as redirect_uri
+     * 4. Cloud function exchanges code for tokens and redirects back to local callback
+     * 5. Local callback receives tokens directly (not auth code)
+     */
     private async startOAuthFlow(client: OAuth2Client): Promise<OAuthLoginResult> {
         logToFile(`Requesting authentication with scopes: ${this.scopes.join(', ')}`);
 
         const port = await this.getAvailablePort();
         const host = 'localhost';
-        const redirectUri = `http://${host}:${port}/oauth2callback`;
+        const localRedirectUri = `http://${host}:${port}/oauth2callback`;
 
         // Generate CSRF token for state parameter
         const csrfToken = crypto.randomBytes(32).toString('hex');
 
-        // Generate PKCE code verifier and challenge
-        // This provides security for desktop apps without needing a client secret
-        this.codeVerifier = generateCodeVerifier();
-        const codeChallenge = generateCodeChallenge(this.codeVerifier);
-        logToFile('Generated PKCE code verifier and challenge');
+        // The state contains a JSON payload with:
+        // - uri: the local callback URL for the cloud function to redirect to
+        // - manual: false to indicate automatic redirect mode
+        // - csrf: CSRF token for validation
+        const statePayload = {
+            uri: localRedirectUri,
+            manual: false,
+            csrf: csrfToken,
+        };
+        const state = Buffer.from(JSON.stringify(statePayload)).toString('base64');
 
+        // Generate auth URL pointing to Google, with cloud function as redirect_uri
         const authUrl = client.generateAuthUrl({
-            redirect_uri: redirectUri,
+            redirect_uri: this.cloudFunctionUrl, // Cloud function handles the callback
             access_type: 'offline',
             scope: this.scopes,
-            state: csrfToken,
+            state: state,
             prompt: 'consent', // Ensure we get a refresh token
-            code_challenge: codeChallenge,
-            code_challenge_method: CodeChallengeMethod.S256,
         });
 
         const loginCompletePromise = new Promise<void>((resolve, reject) => {
@@ -271,7 +301,7 @@ export class McpAuthManager {
 
                     const qs = new url.URL(req.url, `http://${host}:${port}`).searchParams;
 
-                    // Validate CSRF token
+                    // Validate CSRF token (passed back by cloud function in 'state' param)
                     const returnedState = qs.get('state');
                     if (returnedState !== csrfToken) {
                         res.writeHead(400);
@@ -289,36 +319,41 @@ export class McpAuthManager {
                         return;
                     }
 
-                    const code = qs.get('code');
-                    if (!code) {
+                    // Cloud function sends tokens directly in query params
+                    const access_token = qs.get('access_token');
+                    const refresh_token = qs.get('refresh_token');
+                    const scope = qs.get('scope');
+                    const token_type = qs.get('token_type');
+                    const expiry_date_str = qs.get('expiry_date');
+
+                    if (access_token && expiry_date_str) {
+                        const tokens: Credentials = {
+                            access_token: access_token,
+                            refresh_token: refresh_token || undefined,
+                            scope: scope || undefined,
+                            token_type: token_type || undefined,
+                            expiry_date: parseInt(expiry_date_str, 10),
+                        };
+
+                        client.setCredentials(tokens);
+                        logToFile('Tokens received from cloud function and set on client');
+
+                        res.writeHead(200, { 'Content-Type': 'text/html' });
+                        res.end(`
+                            <html>
+                            <head><title>Authentication Successful</title></head>
+                            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                                <h1>Authentication Successful</h1>
+                                <p>You can close this window and return to the terminal.</p>
+                            </body>
+                            </html>
+                        `);
+                        resolve();
+                    } else {
                         res.writeHead(400);
-                        res.end('No authorization code received');
-                        reject(new Error('No authorization code received'));
-                        return;
+                        res.end('Authentication failed: Did not receive tokens from callback.');
+                        reject(new Error('Authentication failed: Did not receive tokens from callback.'));
                     }
-
-                    // Exchange code for tokens using PKCE code verifier
-                    logToFile('Exchanging authorization code for tokens with PKCE...');
-                    const { tokens } = await client.getToken({
-                        code: code,
-                        redirect_uri: redirectUri,
-                        codeVerifier: this.codeVerifier!,
-                    });
-
-                    client.setCredentials(tokens);
-                    logToFile('Tokens received and set on client');
-
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(`
-                        <html>
-                        <head><title>Authentication Successful</title></head>
-                        <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                            <h1>✓ Authentication Successful</h1>
-                            <p>You can close this window and return to the terminal.</p>
-                        </body>
-                        </html>
-                    `);
-                    resolve();
                 } catch (e) {
                     logToFile(`Error in OAuth callback: ${e}`);
                     res.writeHead(500);
