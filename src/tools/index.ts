@@ -1,5 +1,6 @@
 import { ToolDefinition } from "./tool_definition.js";
 import { answerQueryWebsearchTool } from "./answer_query_websearch.js";
+import { answerQueryWorkspaceTool } from "./answer_query_workspace.js";
 import { answerQueryDirectTool } from "./answer_query_direct.js";
 import { explainTopicWithDocsTool } from "./explain_topic_with_docs.js";
 import { getDocSnippetsTool } from "./get_doc_snippets.js";
@@ -40,6 +41,7 @@ import { documentationGeneratorTool } from "./documentation_generator.js";
 export const allTools: ToolDefinition[] = [
     // Query & Generation Tools
     answerQueryWebsearchTool,
+    answerQueryWorkspaceTool,
     answerQueryDirectTool,
     explainTopicWithDocsTool,
     getDocSnippetsTool,

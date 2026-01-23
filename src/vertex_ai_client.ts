@@ -11,31 +11,59 @@ import {
 
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 // Import getAIConfig and original safety setting definitions from config
-import { getAIConfig, vertexSafetySettings, geminiSafetySettings as configGeminiSafetySettings } from './config.js';
+import { getAIConfig, vertexSafetySettings, geminiSafetySettings as configGeminiSafetySettings, USE_OAUTH, VERTEX_AI_OAUTH_SCOPES } from './config.js';
 import { sleep } from './utils.js';
+import { AuthManager } from './auth/AuthManager.js';
 
 // --- Configuration and Client Initialization ---
 const aiConfig = getAIConfig();
 // Use correct client types
 let ai: GoogleGenAI;
+let authManager: AuthManager | null = null;
 
-try {
-    if (aiConfig.geminiApiKey) {
-        ai = new GoogleGenAI({ apiKey: aiConfig.geminiApiKey });
-    } else if (aiConfig.gcpProjectId && aiConfig.gcpLocation) {
-        ai = new GoogleGenAI({
-            vertexai: true,
-            project: aiConfig.gcpProjectId,
-            location: aiConfig.gcpLocation
-        });
-    } else {
-        throw new Error("Missing Gemini API key or Vertex AI project/location configuration.");
-    }
-    console.log("Initialized GoogleGenAI with config:", aiConfig.modelId);
-} catch (error: any) {
-    console.error(`Error initializing GoogleGenAI:`, error.message);
-    process.exit(1);
+// Initialize AuthManager if OAuth is enabled
+if (USE_OAUTH && aiConfig.gcpProjectId) {
+    authManager = new AuthManager(VERTEX_AI_OAUTH_SCOPES);
 }
+
+async function initializeClient(): Promise<void> {
+    try {
+        if (aiConfig.geminiApiKey) {
+            ai = new GoogleGenAI({ apiKey: aiConfig.geminiApiKey });
+        } else if (aiConfig.gcpProjectId && aiConfig.gcpLocation) {
+            if (USE_OAUTH && authManager) {
+                // Get OAuth credentials and initialize with them
+                const oauthClient = await authManager.getAuthenticatedClient();
+                ai = new GoogleGenAI({
+                    vertexai: true,
+                    project: aiConfig.gcpProjectId,
+                    location: aiConfig.gcpLocation,
+                    googleAuthOptions: {
+                        authClient: oauthClient
+                    }
+                });
+                console.log("Initialized GoogleGenAI with OAuth credentials");
+            } else {
+                // Use Application Default Credentials (ADC) or service account
+                ai = new GoogleGenAI({
+                    vertexai: true,
+                    project: aiConfig.gcpProjectId,
+                    location: aiConfig.gcpLocation
+                });
+                console.log("Initialized GoogleGenAI with ADC");
+            }
+        } else {
+            throw new Error("Missing Gemini API key or Vertex AI project/location configuration.");
+        }
+        console.log("GoogleGenAI initialized with model:", aiConfig.modelId);
+    } catch (error: any) {
+        console.error("Error initializing GoogleGenAI:", error.message);
+        process.exit(1);
+    }
+}
+
+// Initialize client at module load
+await initializeClient();
 
 // Define a union type for Content
 export type CombinedContent = Content;
@@ -186,7 +214,7 @@ export async function callGenerativeAI(
             }
 
         } catch (error: any) {
-             console.error(`[${new Date().toISOString()}] Error details (attempt ${attempt + 1}):`, error);
+             console.error('Error details:', { timestamp: new Date().toISOString(), attempt: attempt + 1, error: String(error) });
              const errorMessageString = String(error.message || error || '').toLowerCase();
              const isBlockingError = errorMessageString.includes('blocked') || errorMessageString.includes('safety');
              const isRetryable = !isBlockingError && (

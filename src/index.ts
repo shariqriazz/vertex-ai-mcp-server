@@ -23,7 +23,7 @@ import { minimatch } from 'minimatch';
 import { exec } from 'child_process'; // Added for command execution
 import util from 'util'; // Added for promisify
 
-import { getAIConfig } from './config.js';
+import { getAIConfig, WORKSPACE_DATASTORE_ID } from './config.js';
 // Import CombinedContent along with callGenerativeAI
 import { callGenerativeAI, CombinedContent } from './vertex_ai_client.js';
 import { allTools, toolMap } from './tools/index.js';
@@ -288,11 +288,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Use new config function
         const config = getAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
         // Use new AI function call and type cast
         const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
-        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
+        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
 
         const generatedContent = await callGenerativeAI(
             initialContents,
@@ -313,10 +313,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { output_path } = parsedArgs;
 
         const config = getAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
         const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
-        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
+        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
 
         const generatedContent = await callGenerativeAI(
             initialContents,
@@ -336,10 +336,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { output_path } = parsedArgs;
 
         const config = getAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
         const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
-        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
+        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
 
         const generatedContent = await callGenerativeAI(
             initialContents,
@@ -359,10 +359,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { output_path } = parsedArgs;
 
         const config = getAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
         const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
-        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
+        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
 
         const generatedContent = await callGenerativeAI(
             initialContents,
@@ -382,10 +382,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { output_path } = parsedArgs;
 
         const config = getAIConfig();
-        const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+        const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
 
         const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[];
-        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
+        const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
 
         const generatedContent = await callGenerativeAI(
             initialContents,
@@ -561,9 +561,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!toolDefinition.buildPrompt) {
         throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} is missing required buildPrompt logic.`);
       }
-      const { systemInstructionText, userQueryText, useWebSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
+      const { systemInstructionText, userQueryText, useWebSearch, useWorkspaceSearch, enableFunctionCalling } = toolDefinition.buildPrompt(args, config.modelId);
       const initialContents = buildInitialContent(systemInstructionText, userQueryText) as CombinedContent[]; // Cast
-      const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch);
+      const toolsForApi = getToolsForApi(enableFunctionCalling, useWebSearch, useWorkspaceSearch, WORKSPACE_DATASTORE_ID);
 
       // Call the unified AI function
       const responseText = await callGenerativeAI(
