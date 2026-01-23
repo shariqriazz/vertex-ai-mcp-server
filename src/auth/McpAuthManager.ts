@@ -3,9 +3,15 @@
  *
  * This is a standalone auth manager that uses the MCP server's own OAuth client
  * credentials, separate from the Gemini CLI auth infrastructure.
+ *
+ * SECURITY NOTE: This uses PKCE (Proof Key for Code Exchange) for security.
+ * Per Google's documentation, desktop/installed applications "cannot keep secrets",
+ * so we use PKCE instead of relying on client_secret for security.
+ * The client_id is embedded in the code (it's not a secret - it's a public identifier).
+ * See: https://developers.google.com/identity/protocols/oauth2/native-app
  */
 
-import { OAuth2Client, Credentials } from 'google-auth-library';
+import { OAuth2Client, Credentials, CodeChallengeMethod } from 'google-auth-library';
 import crypto from 'node:crypto';
 import * as http from 'node:http';
 import * as net from 'node:net';
@@ -14,8 +20,13 @@ import { logToFile } from '../utils/logger.js';
 import open from '../utils/open-wrapper.js';
 import { shouldLaunchBrowser } from '../utils/secure-browser-launcher.js';
 
+// OAuth Client ID for the Helix Vertex AI MCP Server
+// This is a PUBLIC identifier, not a secret. It's safe to embed in code.
+// The OAuth app is configured as "Internal" in GCP, so only Helix org users can authenticate.
+// Security is provided by PKCE, not by keeping the client_id secret.
+const DEFAULT_CLIENT_ID = '403334419176-95dvevmlhs9v6lnhbq98e790fevd6hl3.apps.googleusercontent.com';
+
 // Token storage for MCP server (separate from Gemini CLI)
-const TOKEN_STORAGE_KEY = 'vertex-ai-mcp-oauth-tokens';
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 
 // In-memory token cache (persisted to file for simplicity)
@@ -78,20 +89,14 @@ export class McpAuthManager {
     private client: OAuth2Client | null = null;
     private scopes: string[];
     private clientId: string;
-    private clientSecret: string;
+    private codeVerifier: string | null = null;
 
     constructor(scopes: string[]) {
         this.scopes = scopes;
 
-        // Get OAuth client credentials from environment
-        this.clientId = process.env.MCP_OAUTH_CLIENT_ID || '';
-        this.clientSecret = process.env.MCP_OAUTH_CLIENT_SECRET || '';
-
-        if (!this.clientId || !this.clientSecret) {
-            throw new Error(
-                'MCP OAuth credentials not configured. Set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET environment variables.'
-            );
-        }
+        // Use embedded client ID by default, allow override via environment variable
+        // The client_id is a public identifier, not a secret
+        this.clientId = process.env.MCP_OAUTH_CLIENT_ID || DEFAULT_CLIENT_ID;
     }
 
     private isTokenExpiringSoon(credentials: Credentials): boolean {
@@ -156,10 +161,10 @@ export class McpAuthManager {
             }
         }
 
-        // Create new OAuth2Client with our credentials
+        // Create new OAuth2Client with just the client ID (no secret needed for desktop apps)
+        // Security is provided by PKCE, not by client_secret
         const oAuth2Client = new OAuth2Client({
             clientId: this.clientId,
-            clientSecret: this.clientSecret,
         });
 
         // Set up token refresh handler
@@ -280,6 +285,22 @@ export class McpAuthManager {
         });
     }
 
+    /**
+     * Generate a cryptographically random code verifier for PKCE.
+     * Must be 43-128 characters, using unreserved URI characters.
+     */
+    private generateCodeVerifier(): string {
+        // Generate 32 random bytes and encode as base64url (results in 43 chars)
+        return crypto.randomBytes(32).toString('base64url');
+    }
+
+    /**
+     * Generate code challenge from code verifier using SHA256.
+     */
+    private generateCodeChallenge(codeVerifier: string): string {
+        return crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+    }
+
     private async startOAuthFlow(client: OAuth2Client): Promise<OAuthLoginResult> {
         logToFile(`Requesting authentication with scopes: ${this.scopes.join(', ')}`);
 
@@ -287,8 +308,14 @@ export class McpAuthManager {
         const host = 'localhost';
         const redirectUri = `http://${host}:${port}/oauth2callback`;
 
-        // Generate CSRF token
+        // Generate CSRF token for state parameter
         const csrfToken = crypto.randomBytes(32).toString('hex');
+
+        // Generate PKCE code verifier and challenge
+        // This provides security for desktop apps without needing a client secret
+        this.codeVerifier = this.generateCodeVerifier();
+        const codeChallenge = this.generateCodeChallenge(this.codeVerifier);
+        logToFile('Generated PKCE code verifier and challenge');
 
         const authUrl = client.generateAuthUrl({
             redirect_uri: redirectUri,
@@ -296,6 +323,8 @@ export class McpAuthManager {
             scope: this.scopes,
             state: csrfToken,
             prompt: 'consent', // Ensure we get a refresh token
+            code_challenge: codeChallenge,
+            code_challenge_method: CodeChallengeMethod.S256,
         });
 
         const loginCompletePromise = new Promise<void>((resolve, reject) => {
@@ -335,11 +364,12 @@ export class McpAuthManager {
                         return;
                     }
 
-                    // Exchange code for tokens
-                    logToFile('Exchanging authorization code for tokens...');
+                    // Exchange code for tokens using PKCE code verifier
+                    logToFile('Exchanging authorization code for tokens with PKCE...');
                     const { tokens } = await client.getToken({
                         code: code,
                         redirect_uri: redirectUri,
+                        codeVerifier: this.codeVerifier!,
                     });
 
                     client.setCredentials(tokens);
