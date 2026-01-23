@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { McpAuthManager } from '../auth/McpAuthManager.js';
+import { formatSearchResults, parseSearchResults, SearchResult } from '../utils/result-parser.js';
 
 // Input schema
 export const SearchConfluenceSchema = z.object({
@@ -19,73 +20,6 @@ export const SearchConfluenceSchema = z.object({
 });
 
 export type SearchConfluenceInput = z.infer<typeof SearchConfluenceSchema>;
-
-interface SearchResult {
-    title: string;
-    link?: string;
-    snippets: string[];
-    extractive_answers: string[];
-}
-
-/**
- * Clean HTML entities and tags from text.
- */
-function cleanText(text: string): string {
-    return text
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&amp;/g, '&')
-        .replace(/<\/?b>/g, '**')  // Convert bold tags to markdown
-        .replace(/<br\s*\/?>/gi, '\n')  // Convert breaks to newlines
-        .replace(/<[^>]+>/g, '');  // Remove other HTML tags
-}
-
-/**
- * Format search results as structured markdown.
- */
-function formatSearchResults(results: SearchResult[]): string {
-    if (results.length === 0) {
-        return "No results found in Confluence documentation.";
-    }
-
-    let output = `# Confluence Search Results\n\n`;
-    output += `Found ${results.length} relevant pages:\n\n`;
-
-    results.forEach((result, idx) => {
-        output += `## ${idx + 1}. ${result.title}\n\n`;
-
-        if (result.link) {
-            output += `**Link**: ${result.link}\n\n`;
-        }
-
-        if (result.extractive_answers.length > 0) {
-            output += `**Key Information**:\n\n`;
-            result.extractive_answers.forEach(answer => {
-                const cleaned = cleanText(answer);
-                if (cleaned.trim()) {
-                    output += `- ${cleaned}\n`;
-                }
-            });
-            output += '\n';
-        }
-
-        if (result.snippets.length > 0) {
-            output += `**Relevant Snippets**:\n\n`;
-            result.snippets.forEach(snippet => {
-                const cleaned = cleanText(snippet);
-                if (cleaned.trim()) {
-                    output += `${cleaned}\n\n`;
-                }
-            });
-        }
-
-        output += '---\n\n';
-    });
-
-    return output;
-}
 
 /**
  * Make a REST API call to Discovery Engine Search API with OAuth token.
@@ -181,60 +115,8 @@ export async function searchConfluence(input: SearchConfluenceInput): Promise<{ 
         max_results
     );
 
-    const results: SearchResult[] = [];
-
-    // Process results from REST API (plain JSON format)
-    for (const result of searchResults) {
-        const doc = result.document as any;
-        if (!doc) continue;
-
-        const derivedData = doc.derivedStructData;
-        const structData = doc.structData;
-
-        const searchResult: SearchResult = {
-            title: derivedData?.title || structData?.title || 'Untitled',
-            link: derivedData?.url || structData?.uri || structData?.self || '',
-            snippets: [],
-            extractive_answers: []
-        };
-
-        // Extract snippets
-        const snippetsList = derivedData?.snippets;
-        if (snippetsList && Array.isArray(snippetsList)) {
-            for (const snippetItem of snippetsList) {
-                const snippetText = snippetItem?.snippet;
-                if (snippetText) {
-                    searchResult.snippets.push(snippetText);
-                }
-            }
-        }
-
-        // Extract extractive answers
-        const answersList = derivedData?.extractive_answers;
-        if (answersList && Array.isArray(answersList)) {
-            for (const answerItem of answersList) {
-                const answerText = answerItem?.content;
-                if (answerText) {
-                    searchResult.extractive_answers.push(answerText);
-                }
-            }
-        }
-
-        // Extract extractive segments as additional snippets
-        const segmentsList = derivedData?.extractive_segments;
-        if (segmentsList && Array.isArray(segmentsList)) {
-            for (const segmentItem of segmentsList) {
-                const segmentText = segmentItem?.content;
-                if (segmentText) {
-                    searchResult.snippets.push(segmentText);
-                }
-            }
-        }
-
-        results.push(searchResult);
-    }
-
-    // Format the results
+    // Parse and format the results
+    const results = parseSearchResults(searchResults);
     const formattedResults = formatSearchResults(results);
 
     // Return as MCP tool result

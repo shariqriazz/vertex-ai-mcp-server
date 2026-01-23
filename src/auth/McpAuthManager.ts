@@ -18,64 +18,20 @@ import * as net from 'node:net';
 import * as url from 'node:url';
 import { logToFile } from '../utils/logger.js';
 import open from '../utils/open-wrapper.js';
-import { shouldLaunchBrowser } from '../utils/secure-browser-launcher.js';
+import { generateCodeVerifier, generateCodeChallenge } from '../utils/pkce.js';
+import {
+    loadTokens,
+    saveTokens,
+    clearTokens,
+    checkTokenScopes,
+    isTokenExpiringSoon
+} from '../utils/token-storage.js';
 
 // OAuth Client ID for the Helix Vertex AI MCP Server
 // This is a PUBLIC identifier, not a secret. It's safe to embed in code.
 // The OAuth app is configured as "Internal" in GCP, so only Helix org users can authenticate.
 // Security is provided by PKCE, not by keeping the client_id secret.
 const DEFAULT_CLIENT_ID = '403334419176-95dvevmlhs9v6lnhbq98e790fevd6hl3.apps.googleusercontent.com';
-
-// Token storage for MCP server (separate from Gemini CLI)
-const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
-
-// In-memory token cache (persisted to file for simplicity)
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
-
-function getTokenFilePath(): string {
-    const configDir = path.join(os.homedir(), '.config', 'vertex-ai-mcp');
-    if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
-    }
-    return path.join(configDir, 'oauth-tokens.json');
-}
-
-function loadTokens(): Credentials | null {
-    try {
-        const tokenFile = getTokenFilePath();
-        if (fs.existsSync(tokenFile)) {
-            const data = fs.readFileSync(tokenFile, 'utf-8');
-            return JSON.parse(data);
-        }
-    } catch (error) {
-        logToFile(`Error loading tokens: ${error}`);
-    }
-    return null;
-}
-
-function saveTokens(tokens: Credentials): void {
-    try {
-        const tokenFile = getTokenFilePath();
-        fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2), { mode: 0o600 });
-        logToFile(`Tokens saved to ${tokenFile}`);
-    } catch (error) {
-        logToFile(`Error saving tokens: ${error}`);
-    }
-}
-
-function clearTokens(): void {
-    try {
-        const tokenFile = getTokenFilePath();
-        if (fs.existsSync(tokenFile)) {
-            fs.unlinkSync(tokenFile);
-            logToFile('Tokens cleared');
-        }
-    } catch (error) {
-        logToFile(`Error clearing tokens: ${error}`);
-    }
-}
 
 /**
  * OAuth login result containing the auth URL and completion promise.
@@ -99,23 +55,16 @@ export class McpAuthManager {
         this.clientId = process.env.MCP_OAUTH_CLIENT_ID || DEFAULT_CLIENT_ID;
     }
 
-    private isTokenExpiringSoon(credentials: Credentials): boolean {
-        return !!(credentials.expiry_date &&
-            credentials.expiry_date < Date.now() + TOKEN_EXPIRY_BUFFER_MS);
-    }
-
     private async loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
         const credentials = loadTokens();
 
         if (credentials) {
             // Check if saved token has required scopes
-            const savedScopes = new Set(credentials.scope?.split(' ') ?? []);
-            logToFile(`Cached token has scopes: ${[...savedScopes].join(', ')}`);
+            const { hasAllScopes, missingScopes } = checkTokenScopes(credentials, this.scopes);
+            logToFile(`Cached token has scopes: ${credentials.scope ?? ''}`);
             logToFile(`Required scopes: ${this.scopes.join(', ')}`);
 
-            const missingScopes = this.scopes.filter(scope => !savedScopes.has(scope));
-
-            if (missingScopes.length > 0) {
+            if (!hasAllScopes) {
                 logToFile(`Token cache missing required scopes: ${missingScopes.join(', ')}`);
                 logToFile('Removing cached token to force re-authentication...');
                 clearTokens();
@@ -140,7 +89,7 @@ export class McpAuthManager {
         if (this.client && this.client.credentials && this.client.credentials.refresh_token) {
             logToFile('Returning existing cached client with valid credentials');
 
-            const isExpired = this.isTokenExpiringSoon(this.client.credentials);
+            const isExpired = isTokenExpiringSoon(this.client.credentials);
             logToFile(`Token expired: ${isExpired}`);
 
             // Proactively refresh if expired
@@ -192,7 +141,7 @@ export class McpAuthManager {
             logToFile('Loaded saved credentials, caching and returning client');
             this.client = oAuth2Client;
 
-            const isExpired = this.isTokenExpiringSoon(this.client.credentials);
+            const isExpired = isTokenExpiringSoon(this.client.credentials);
             logToFile(`Token expired: ${isExpired}`);
 
             if (isExpired) {
@@ -285,22 +234,6 @@ export class McpAuthManager {
         });
     }
 
-    /**
-     * Generate a cryptographically random code verifier for PKCE.
-     * Must be 43-128 characters, using unreserved URI characters.
-     */
-    private generateCodeVerifier(): string {
-        // Generate 32 random bytes and encode as base64url (results in 43 chars)
-        return crypto.randomBytes(32).toString('base64url');
-    }
-
-    /**
-     * Generate code challenge from code verifier using SHA256.
-     */
-    private generateCodeChallenge(codeVerifier: string): string {
-        return crypto.createHash('sha256').update(codeVerifier).digest('base64url');
-    }
-
     private async startOAuthFlow(client: OAuth2Client): Promise<OAuthLoginResult> {
         logToFile(`Requesting authentication with scopes: ${this.scopes.join(', ')}`);
 
@@ -313,8 +246,8 @@ export class McpAuthManager {
 
         // Generate PKCE code verifier and challenge
         // This provides security for desktop apps without needing a client secret
-        this.codeVerifier = this.generateCodeVerifier();
-        const codeChallenge = this.generateCodeChallenge(this.codeVerifier);
+        this.codeVerifier = generateCodeVerifier();
+        const codeChallenge = generateCodeChallenge(this.codeVerifier);
         logToFile('Generated PKCE code verifier and challenge');
 
         const authUrl = client.generateAuthUrl({
