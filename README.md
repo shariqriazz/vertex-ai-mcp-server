@@ -9,6 +9,12 @@ This project implements a Model Context Protocol (MCP) server that provides a co
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@shariqriazz/vertex-ai-mcp-server/badge" alt="Vertex AI Server MCP server" />
 </a>
 
+## Security boundary
+
+This server includes filesystem write and terminal-execution tools in addition to model and research tools. Run it with a dedicated low-privilege identity, limit its filesystem and network access, and keep consequential tools behind explicit approval. Do not treat an MCP client confirmation prompt as server-side authorization.
+
+For the implementation tradeoffs this project exposed alongside six other public MCP codebases, see [What building seven MCP servers taught me about production MCP](https://www.orchestriai.com/blog/lessons-building-seven-mcp-servers). The article uses this repository as public engineering evidence; it does not claim that every production control discussed there is already implemented here.
+
 ## Features
 
 *   Provides access to Vertex AI Gemini models via numerous MCP tools.
